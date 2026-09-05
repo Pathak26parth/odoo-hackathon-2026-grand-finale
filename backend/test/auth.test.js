@@ -214,6 +214,11 @@ async function runTests() {
     // -----------------------------------------------------------------
     console.log('\n--- TEST GROUP 5: ATTENDANCE & BIOMETRIC FACE VERIFICATION ---');
 
+    // Verify Python Face Service Health
+    const faceService = require('../src/services/faceVerificationService');
+    const pyHealth = await faceService.checkPythonHealth();
+    assert(pyHealth.online === true, 'Python Face AI microservice is online and healthy on port 8000');
+
     // Face enrollment status
     const faceStatus = await request('/api/attendance/face/status', {
       headers: { Authorization: `Bearer ${empToken}` }
