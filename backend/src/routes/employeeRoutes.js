@@ -26,7 +26,17 @@ router.put('/:id', requireAuth, (req, res, next) => {
   }
   return sendError(res, 'Forbidden: You do not have permission to update this employee.', 403);
 });
-router.delete('/:id', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_DELETE), (req, res, next) => employeeController.deleteEmployee(req, res, next));
+router.delete('/:id', requireAuth, (req, res, next) => {
+  if (
+    req.user.role === 'ADMIN' ||
+    req.user.role === 'HR_MANAGER' ||
+    req.user.role === 'HR_PAYROLL_ADMIN' ||
+    req.user.permissions?.includes(PERMISSIONS.EMPLOYEES_DELETE)
+  ) {
+    return employeeController.deleteEmployee(req, res, next);
+  }
+  return sendError(res, 'Forbidden: You do not have permission to delete this employee.', 403);
+});
 
 // Smart Button Related Record Sub-Resources
 router.get('/:id/contracts', requireAuth, requirePermission(PERMISSIONS.CONTRACTS_READ), (req, res, next) => employeeController.getEmployeeContracts(req, res, next));

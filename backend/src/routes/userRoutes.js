@@ -16,6 +16,7 @@ router.get('/:id', requireAuth, requirePermission(PERMISSIONS.USERS_READ), (req,
 router.post('/', requireAuth, requirePermission(PERMISSIONS.USERS_CREATE), (req, res, next) => userController.createUser(req, res, next));
 router.patch('/:id/role', requireAuth, requirePermission(PERMISSIONS.ROLES_MANAGE), (req, res, next) => userController.changeUserRole(req, res, next));
 router.put('/:id', requireAuth, requirePermission(PERMISSIONS.USERS_UPDATE), (req, res, next) => userController.updateUser(req, res, next));
+router.post('/:id/reset-password', requireAuth, requirePermission(PERMISSIONS.USERS_UPDATE), (req, res, next) => userController.resetUserPassword(req, res, next));
 router.delete('/:id', requireAuth, requirePermission(PERMISSIONS.USERS_DELETE), (req, res, next) => userController.deleteUser(req, res, next));
 
 module.exports = router;

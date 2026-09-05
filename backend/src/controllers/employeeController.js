@@ -552,23 +552,51 @@ class EmployeeController {
     try {
       const { id } = req.params;
 
-      const existing = await query('SELECT * FROM employees WHERE id = ?', [id]);
+      const existing = await query('SELECT * FROM employees WHERE id = ? OR employee_code = ?', [id, id]);
       if (existing.length === 0) {
         return sendError(res, 'Employee not found.', 404);
       }
+      const actualEmpId = existing[0].id;
 
-      // Soft delete by updating status to TERMINATED
-      await query('UPDATE employees SET status = "TERMINATED", updated_at = NOW() WHERE id = ?', [id]);
-      await query('UPDATE users SET is_active = FALSE WHERE employee_id = ?', [id]);
+      // Safety protection for primary Administrator
+      if (actualEmpId === 1) {
+        return sendError(res, 'Safety lock: System Administrator employee profile cannot be deleted.', 400);
+      }
+
+      // Unlink manager references in departments and other employees
+      await query('UPDATE departments SET manager_id = NULL WHERE manager_id = ?', [actualEmpId]);
+      await query('UPDATE employees SET manager_id = NULL WHERE manager_id = ?', [actualEmpId]);
+
+      // Delete linked user account and verification tokens
+      const linkedUsers = await query('SELECT id FROM users WHERE employee_id = ?', [actualEmpId]);
+      for (const u of linkedUsers) {
+        await query('DELETE FROM email_verification_tokens WHERE user_id = ?', [u.id]);
+        await query('DELETE FROM password_reset_tokens WHERE user_id = ?', [u.id]);
+        await query('DELETE FROM audit_logs WHERE user_id = ?', [u.id]);
+        await query('DELETE FROM users WHERE id = ?', [u.id]);
+      }
+
+      // Delete child records cleanly
+      await query('DELETE FROM employee_bank_details WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM face_enrollments WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM face_verification_logs WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM time_off_allocations WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM time_off_requests WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM attendance WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM contracts WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM payslips WHERE employee_id = ?', [actualEmpId]);
+
+      // Delete employee record
+      await query('DELETE FROM employees WHERE id = ?', [actualEmpId]);
 
       // Audit Log
       await query(
         `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
-         VALUES (?, 'EMPLOYEE_TERMINATED', 'Employees', ?, 'Employee marked terminated and user deactivated', ?, ?)`,
-        [req.user.id, String(id), req.ip, req.headers['user-agent'] || '']
+         VALUES (?, 'EMPLOYEE_DELETED', 'Employees', ?, 'Admin deleted employee profile and linked records', ?, ?)`,
+        [req.user.id, String(actualEmpId), req.ip, req.headers['user-agent'] || '']
       );
 
-      return sendSuccess(res, 'Employee status updated to Terminated and user access deactivated.');
+      return sendSuccess(res, 'Employee deleted successfully.');
     } catch (error) {
       next(error);
     }
