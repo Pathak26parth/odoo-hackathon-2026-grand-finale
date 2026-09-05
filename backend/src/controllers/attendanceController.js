@@ -8,19 +8,62 @@ const faceVerificationService = require('../services/faceVerificationService');
  */
 class AttendanceController {
   /**
+   * Helper to securely resolve target employee and enforce self-attendance boundary for regular employees.
+   */
+  async _resolveAuthorizedEmployee(req, employeeIdFromBody) {
+    const isPrivileged =
+      req.user.role === 'ADMIN' ||
+      req.user.role === 'HR_MANAGER' ||
+      req.user.role === 'HR_PAYROLL_ADMIN';
+
+    // If privileged admin/manager and specifically provided an employeeId, resolve that employee
+    if (isPrivileged && employeeIdFromBody) {
+      const targetEmp = await faceVerificationService.resolveEmployee(employeeIdFromBody);
+      if (!targetEmp) {
+        const err = new Error(`Employee record not found for "${employeeIdFromBody}".`);
+        err.statusCode = 404;
+        throw err;
+      }
+      return targetEmp;
+    }
+
+    // Regular employee can ONLY punch or verify for themselves
+    if (!req.user.employeeId) {
+      const err = new Error('No employee profile is linked to your user account.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // If non-privileged employee supplied another employee's code/ID, block it strictly with 403
+    if (!isPrivileged && employeeIdFromBody) {
+      const targetEmp = await faceVerificationService.resolveEmployee(employeeIdFromBody);
+      if (targetEmp && targetEmp.id !== req.user.employeeId) {
+        const err = new Error('Forbidden: Employees are strictly prohibited from verifying or recording attendance for other employees.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    // Resolve logged in employee record
+    const selfEmp = await faceVerificationService.resolveEmployee(req.user.employeeId);
+    if (!selfEmp) {
+      const err = new Error('Your employee profile was not found.');
+      err.statusCode = 404;
+      throw err;
+    }
+    return selfEmp;
+  }
+
+  /**
    * Portal Check-In
    * POST /api/attendance/check-in
    */
   async checkIn(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
-
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
 
       const result = await attendanceService.checkIn({
-        employeeId,
+        employeeId: employee.id,
         verificationMethod: 'PORTAL',
         checkInTime: new Date()
       });
@@ -37,14 +80,10 @@ class AttendanceController {
    */
   async checkOut(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
-
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
 
       const result = await attendanceService.checkOut({
-        employeeId,
+        employeeId: employee.id,
         verificationMethod: 'PORTAL',
         checkOutTime: new Date()
       });
@@ -61,21 +100,12 @@ class AttendanceController {
    */
   async faceCheckIn(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
       let { faceInput, deviceInfo = 'WebCam' } = req.body;
-
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
 
       // Unpack object payloads if frame was sent as { dataUrl: ... }
       if (faceInput && typeof faceInput === 'object') {
         faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || null;
-      }
-
-      const employee = await faceVerificationService.resolveEmployee(employeeId);
-      if (!employee) {
-        return sendError(res, `Employee record not found for "${employeeId}".`, 404);
       }
 
       let verification = null;
@@ -145,21 +175,12 @@ class AttendanceController {
    */
   async faceCheckOut(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
       let { faceInput, deviceInfo = 'WebCam' } = req.body;
-
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
 
       // Unpack object payloads if frame was sent as { dataUrl: ... }
       if (faceInput && typeof faceInput === 'object') {
         faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || null;
-      }
-
-      const employee = await faceVerificationService.resolveEmployee(employeeId);
-      if (!employee) {
-        return sendError(res, `Employee record not found for "${employeeId}".`, 404);
       }
 
       let verification = null;
@@ -229,16 +250,16 @@ class AttendanceController {
    */
   async faceVerify(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
-      const { faceInput, deviceInfo = 'WebCam' } = req.body;
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
+      let { faceInput, deviceInfo = 'WebCam' } = req.body;
 
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
+      if (faceInput && typeof faceInput === 'object') {
+        faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || null;
       }
 
       // 1. Run 1:1 Face & Liveness Verification
       const verification = await faceVerificationService.verifyFace({
-        employeeId,
+        employeeId: employee.id,
         verificationType: 'KIOSK',
         faceInput,
         deviceInfo
@@ -249,7 +270,6 @@ class AttendanceController {
       }
 
       // 2. Fetch employee details and today's attendance status
-      const employee = await faceVerificationService.resolveEmployee(employeeId);
       const todayStr = new Date().toISOString().split('T')[0];
       const todayRecords = await query(
         `SELECT id, check_in, check_out, status, worked_hours 
@@ -294,17 +314,13 @@ class AttendanceController {
    */
   async enrollFace(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
       const { faceData, faceEmbeddingOrImage, faceInput, image, livenessScore = 0.985 } = req.body;
 
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
-
-      const input = faceData || faceEmbeddingOrImage || faceInput || image || `template_${employeeId}_${Date.now()}`;
+      const input = faceData || faceEmbeddingOrImage || faceInput || image || `template_${employee.id}_${Date.now()}`;
 
       const result = await faceVerificationService.enrollFace({
-        employeeId,
+        employeeId: employee.id,
         faceEmbeddingOrImage: input,
         livenessScore
       });
@@ -321,12 +337,10 @@ class AttendanceController {
    */
   async getFaceStatus(req, res, next) {
     try {
-      const employeeId = req.query.employeeId || req.user.employeeId;
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
+      const employee = await this._resolveAuthorizedEmployee(req, req.query.employeeId);
 
-      const status = await faceVerificationService.getEnrollmentStatus(employeeId);
+      const status = await faceVerificationService.getEnrollmentStatus(employee.id);
+
       return sendSuccess(res, 'Face enrollment status retrieved', status);
     } catch (error) {
       next(error);
@@ -339,13 +353,17 @@ class AttendanceController {
    */
   async revokeFaceEnrollment(req, res, next) {
     try {
-      const employeeId = req.body.employeeId || req.user.employeeId;
-      if (!employeeId) {
-        return sendError(res, 'Employee ID is required.', 400);
-      }
+      const employee = await this._resolveAuthorizedEmployee(req, req.query.employeeId || req.body.employeeId);
 
-      const result = await faceVerificationService.revokeEnrollment(employeeId, req.user.id);
-      return sendSuccess(res, result.message);
+      await query('DELETE FROM face_enrollments WHERE employee_id = ?', [employee.id]);
+
+      await query(
+        `INSERT INTO audit_logs (action, module, record_id, description)
+         VALUES ('FACE_ENROLLMENT_REVOKED', 'Face', ?, 'Employee face biometrics enrollment was removed')`,
+        [String(employee.id)]
+      );
+
+      return sendSuccess(res, 'Face enrollment revoked successfully.');
     } catch (error) {
       next(error);
     }

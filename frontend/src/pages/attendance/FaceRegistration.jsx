@@ -22,8 +22,35 @@ import {
 export const FaceRegistration = () => {
   const { currentUser } = useAuth();
   const cameraRef = useRef(null);
-  const [employees, setEmployees] = useState(getEmployees());
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+
+  const isManagerOrAdmin =
+    currentUser?.role === 'Admin' ||
+    currentUser?.role === 'HR Manager' ||
+    currentUser?.role === 'HR Payroll Manager' ||
+    currentUser?.roleRaw === 'ADMIN' ||
+    currentUser?.roleRaw === 'HR_MANAGER' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
+  const selfId = String(currentUser?.internalEmployeeId || currentUser?.id || '1');
+  const selfCode =
+    currentUser?.employeeId ||
+    (currentUser?.internalEmployeeId ? `EMP-${String(currentUser.internalEmployeeId).padStart(3, '0')}` : 'EMP-001');
+
+  // Enforce boundary: regular employees can only register their own face
+  const [employees, setEmployees] = useState(() => {
+    if (!isManagerOrAdmin && currentUser) {
+      return [{
+        id: selfId,
+        employeeId: selfCode,
+        name: currentUser?.name || currentUser?.employeeName || 'Employee',
+        department: currentUser?.department || 'General',
+        position: currentUser?.position || 'Staff',
+        avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+      }];
+    }
+    return isManagerOrAdmin ? getEmployees() : [];
+  });
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(selfId);
   const [cameraActive, setCameraActive] = useState(true);
   const [regState, setRegState] = useState('Camera Ready');
   const [capturedFrame, setCapturedFrame] = useState(null);
@@ -36,6 +63,30 @@ export const FaceRegistration = () => {
   useEffect(() => {
     let mounted = true;
     const loadEmps = async () => {
+      const isPrivileged =
+        currentUser?.role === 'Admin' ||
+        currentUser?.role === 'HR Manager' ||
+        currentUser?.role === 'HR Payroll Manager' ||
+        currentUser?.roleRaw === 'ADMIN' ||
+        currentUser?.roleRaw === 'HR_MANAGER' ||
+        currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
+      if (!isPrivileged) {
+        const selfObj = {
+          id: selfId,
+          employeeId: selfCode,
+          name: currentUser?.name || currentUser?.employeeName || 'Employee',
+          department: currentUser?.department || 'General',
+          position: currentUser?.position || 'Staff',
+          avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+        };
+        if (mounted) {
+          setEmployees([selfObj]);
+          setSelectedEmployeeId(selfId);
+        }
+        return;
+      }
+
       try {
         const empList = await employeeService.getAllEmployees();
         if (mounted && Array.isArray(empList) && empList.length > 0) {
@@ -198,32 +249,38 @@ export const FaceRegistration = () => {
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Step 1 — Select Employee
+            {isManagerOrAdmin ? 'Step 1 — Select Employee' : 'Employee Biometric Profile'}
           </h2>
-          <span className="text-xs text-slate-400">Select an employee to view registration status</span>
+          <span className="text-xs text-slate-400">
+            {isManagerOrAdmin
+              ? 'Select an employee to view registration status'
+              : 'Your facial recognition enrollment status'}
+          </span>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">
-            Choose Employee
-          </label>
-          <select
-            value={selectedEmployeeId}
-            onChange={(e) => {
-              setSelectedEmployeeId(e.target.value);
-              setRegState('Camera Ready');
-              setSuccessMessage('');
-              setErrorMessage('');
-            }}
-            className="w-full sm:w-80 px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.name} ({emp.employeeId}) — {emp.department}
-              </option>
-            ))}
-          </select>
-        </div>
+        {isManagerOrAdmin && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Choose Employee
+            </label>
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => {
+                setSelectedEmployeeId(e.target.value);
+                setRegState('Camera Ready');
+                setSuccessMessage('');
+                setErrorMessage('');
+              }}
+              className="w-full sm:w-80 px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} ({emp.employeeId}) — {emp.department}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {selectedEmployee && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
