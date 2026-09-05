@@ -30,14 +30,19 @@ async function sendMail({ to, subject, html, text, attachments = [] }) {
   }
 
   try {
+    const fromAddress = env.SMTP_USER
+      ? `PeoplePay360 <${env.SMTP_USER}>`
+      : (env.MAIL_FROM || 'PeoplePay360 <no-reply@peoplepay360.com>');
+
     const info = await transporter.sendMail({
-      from: env.MAIL_FROM,
+      from: fromAddress,
       to,
       subject,
       text,
       html,
       attachments
     });
+    console.log(`[Email Service] Delivered email to ${to} (Message ID: ${info.messageId})`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error(`[Email Error] Failed to send email to ${to}:`, error.message);
@@ -145,9 +150,69 @@ async function sendPayslipEmail({ name, email, period, netSalary, pdfBuffer }) {
   return sendMail({ to: email, subject, html, text: `Your payslip for ${period} is attached.`, attachments });
 }
 
+/**
+ * Send Employee Profile / Email Updated Notification Email
+ */
+async function sendEmployeeEmailUpdated({ name, oldEmail, newEmail, employeeCode, jobPosition, departmentName, tempPassword, activationToken }) {
+  const portalUrl = env.FRONTEND_URL;
+  const loginUrl = `${portalUrl}/login`;
+  const activationUrl = activationToken ? `${portalUrl}/activate?token=${activationToken}&email=${encodeURIComponent(newEmail)}` : null;
+
+  const subject = 'PeoplePay360 — Your Employee Profile & Email Updated';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;">
+      <div style="background: #1e293b; padding: 16px; border-radius: 6px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 22px;">PeoplePay360</h1>
+        <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 13px;">HR & Payroll Operations Platform</p>
+      </div>
+
+      <div style="padding: 24px 0;">
+        <h2 style="color: #0f172a; font-size: 18px;">Hello ${name},</h2>
+        <p style="color: #334155; line-height: 1.6;">
+          Your official employee profile email has been updated on the <strong>PeoplePay360</strong> portal.
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 16px; border-radius: 6px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Employee ID:</strong> ${employeeCode || '—'}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Updated Login Email:</strong> <strong style="color: #2563eb;">${newEmail}</strong></p>
+          ${jobPosition ? `<p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Job Position:</strong> ${jobPosition}</p>` : ''}
+          ${departmentName ? `<p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Department:</strong> ${departmentName}</p>` : ''}
+          ${tempPassword ? `<p style="margin: 8px 0 0 0; font-size: 14px; color: #475569;"><strong>Temporary Password:</strong> <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px;">${tempPassword}</code></p>` : ''}
+        </div>
+
+        <p style="color: #334155; line-height: 1.6;">
+          You can now use this email address to log in to the employee portal, record attendance, access payslips, and manage time off requests.
+        </p>
+
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${activationUrl || loginUrl}" style="background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+            ${activationUrl ? 'Activate Account & Set Password' : 'Sign In to Employee Portal'}
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 13px;">
+          If you did not authorize this change, please contact your HR administrator immediately.
+        </p>
+      </div>
+
+      <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; color: #94a3b8; font-size: 12px;">
+        &copy; ${new Date().getFullYear()} PeoplePay360 HR & Payroll. All rights reserved.
+      </div>
+    </div>
+  `;
+
+  return sendMail({
+    to: newEmail,
+    subject,
+    html,
+    text: `Hello ${name}, your PeoplePay360 account email has been updated to ${newEmail}. Login at: ${loginUrl}`
+  });
+}
+
 module.exports = {
   sendMail,
   sendEmployeeInvitation,
+  sendEmployeeEmailUpdated,
   sendPasswordResetEmail,
   sendPayslipEmail
 };

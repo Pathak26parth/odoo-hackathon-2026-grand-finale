@@ -2,6 +2,7 @@ const { query } = require('../config/db');
 const { sendSuccess, sendCreated, sendError, maskAccountNumber } = require('../utils/response');
 const authService = require('../services/authService');
 const cloudinaryService = require('../services/cloudinaryService');
+const { sendEmployeeEmailUpdated } = require('../services/emailService');
 
 /**
  * Employee Master Management Controller
@@ -431,9 +432,27 @@ class EmployeeController {
 
       await query(sql, params);
 
-      // Update linked user account if exists
+      const emailChanged = targetEmail && targetEmail !== existing[0].email;
+
+      // Update linked user account if exists or create if missing
       if (targetEmail) {
-        await query('UPDATE users SET email = ?, updated_at = NOW() WHERE employee_id = ?', [targetEmail, actualEmpId]);
+        const linkedUsers = await query('SELECT id FROM users WHERE employee_id = ?', [actualEmpId]);
+        if (linkedUsers.length > 0) {
+          await query('UPDATE users SET email = ?, updated_at = NOW() WHERE employee_id = ?', [targetEmail, actualEmpId]);
+        } else {
+          try {
+            const roleId = await authService.resolveRoleId('EMPLOYEE');
+            const tempPassword = authService.generateSecurePassword(12);
+            const passwordHash = await authService.hashPassword(tempPassword);
+            await query(
+              `INSERT INTO users (email, password_hash, role_id, employee_id, is_active, is_verified, must_change_password)
+               VALUES (?, ?, ?, ?, TRUE, FALSE, TRUE)`,
+              [targetEmail, passwordHash, roleId, actualEmpId]
+            );
+          } catch (uErr) {
+            console.warn('[Employee Update] User account creation warning:', uErr.message);
+          }
+        }
       }
       if (targetStatus) {
         const isActive = targetStatus === 'ACTIVE';
@@ -490,6 +509,22 @@ class EmployeeController {
         WHERE e.id = ?
         LIMIT 1
       `, [actualEmpId]);
+
+      // Trigger asynchronous email notification to target email
+      if (targetEmail) {
+        sendEmployeeEmailUpdated({
+          name: `${fName || existing[0].first_name} ${lName || existing[0].last_name}`.trim(),
+          oldEmail: existing[0].email,
+          newEmail: targetEmail,
+          employeeCode: existing[0].employee_code,
+          jobPosition: targetJobPosition || existing[0].job_position,
+          departmentName: updatedEmp?.department_name || null
+        }).then((mailRes) => {
+          console.log(`[Employee Update] Email notification delivered to ${targetEmail}:`, mailRes);
+        }).catch((err) => {
+          console.error(`[Employee Update] Email notification error:`, err.message);
+        });
+      }
 
       // Audit Log
       await query(
