@@ -322,6 +322,31 @@ CREATE TABLE `face_verification_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
+-- 16.1 ATTENDANCE CORRECTION REQUESTS (Regularization Workflow)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `attendance_correction_requests` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `employee_id` INT NOT NULL,
+  `attendance_id` INT NULL,
+  `request_date` DATE NOT NULL,
+  `proposed_check_in` DATETIME NOT NULL,
+  `proposed_check_out` DATETIME NOT NULL,
+  `reason` VARCHAR(255) NOT NULL,
+  `status` ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED') NOT NULL DEFAULT 'PENDING',
+  `reviewed_by` INT NULL,
+  `reviewed_at` DATETIME NULL,
+  `reviewer_notes` VARCHAR(255) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`employee_id`) REFERENCES `employees`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`attendance_id`) REFERENCES `attendance`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`reviewed_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_att_corr_emp` (`employee_id`),
+  INDEX `idx_att_corr_date` (`request_date`),
+  INDEX `idx_att_corr_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
 -- 17. TIME OFF TYPES
 -- ---------------------------------------------------------------------
 CREATE TABLE `time_off_types` (

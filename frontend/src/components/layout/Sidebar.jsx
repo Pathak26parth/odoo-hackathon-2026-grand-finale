@@ -201,22 +201,40 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 </div>
               )}
 
-              {/* For Employee-only portal, provide simple direct Face Check-In & Attendance link */}
+              {/* For Employee-only portal, provide Face Check-In and My Attendance links */}
               {isEmployeeOnly && (
-                <NavLink
-                  to="/attendance/face-check-in"
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`
-                  }
-                >
-                  <Sparkles className="w-4 h-4 shrink-0 text-blue-500" />
-                  <span>Face Check-In</span>
-                </NavLink>
+                <div className="space-y-0.5">
+                  <NavLink
+                    to="/attendance/face-check-in"
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <Sparkles className="w-4 h-4 shrink-0 text-blue-500" />
+                    <span>Face Check-In</span>
+                  </NavLink>
+
+                  <NavLink
+                    to="/attendance"
+                    end
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <Clock className="w-4 h-4 shrink-0 text-blue-600" />
+                    <span>My Attendance</span>
+                  </NavLink>
+                </div>
               )}
 
               {/* Nested Time Off Accordion */}

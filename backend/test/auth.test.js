@@ -254,6 +254,68 @@ async function runTests() {
     });
     assert(unauthorizedCheckIn.status === 403, 'Employee strictly blocked from manual check-in for another employee (403 Forbidden)');
 
+    // Live Attendance Status & Timeout
+    const myStatusRes = await request('/api/attendance/my-status', {
+      headers: { Authorization: `Bearer ${empToken}` }
+    });
+    assert(myStatusRes.status === 200 && myStatusRes.data.data.sessionStatus, 'Employee can retrieve live today attendance status & schedule timeout');
+
+    // Personal Attendance History & KPIs
+    const myHistoryRes = await request('/api/attendance/my-history', {
+      headers: { Authorization: `Bearer ${empToken}` }
+    });
+    assert(myHistoryRes.status === 200 && myHistoryRes.data.data.summary && Array.isArray(myHistoryRes.data.data.records), 'Employee can retrieve personal attendance history and KPI metrics');
+
+    // Attendance Regularization & Correction Request Workflow
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+    await query('DELETE FROM attendance_correction_requests WHERE employee_id = 5 AND request_date = ?', [yesterdayStr]);
+
+    // 1. Employee submits correction request for yesterday's missed checkout
+    const corrReqRes = await request('/api/attendance/correction-requests', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: {
+        requestDate: yesterdayStr,
+        proposedCheckIn: `${yesterdayStr} 09:00:00`,
+        proposedCheckOut: `${yesterdayStr} 17:30:00`,
+        reason: 'Forgot to badge out at end of shift'
+      }
+    });
+    assert(corrReqRes.status === 201 && corrReqRes.data.data.requestId, 'Employee can submit attendance correction request to HR (201 Created)');
+    const corrRequestId = corrReqRes.data.data.requestId;
+
+    // 2. Security Boundary: Regular Employee blocked from approving own correction request
+    const empApproveAttempt = await request(`/api/attendance/correction-requests/${corrRequestId}/approve`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: { reviewerNotes: 'Self approval' }
+    });
+    assert(empApproveAttempt.status === 403, 'Employee blocked from approving own attendance correction request (403 Forbidden)');
+
+    // 3. HR Manager approves attendance correction request
+    const hrApproveRes = await request(`/api/attendance/correction-requests/${corrRequestId}/approve`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${hrmToken}` },
+      body: { reviewerNotes: 'Verified badge logs and approved' }
+    });
+    assert(hrApproveRes.status === 200 && hrApproveRes.data.data.status === 'APPROVED', 'HR Manager approves correction request and updates attendance record (200 OK)');
+
+    // 4. Verify attendance record is now updated in MySQL with manual correction flag and calculated hours
+    const updatedAttRows = await query(
+      'SELECT * FROM attendance WHERE employee_id = 5 AND date = ?',
+      [yesterdayStr]
+    );
+    assert(updatedAttRows.length > 0, 'Attendance record exists for approved date');
+    assert(updatedAttRows[0].is_manual_correction === 1, 'Attendance record marked as is_manual_correction = 1');
+    assert(parseFloat(updatedAttRows[0].worked_hours) > 0, 'Worked hours calculated upon correction approval');
+
+    // Clean up test correction fixtures
+    await query('DELETE FROM attendance_correction_requests WHERE id = ?', [corrRequestId]);
+    await query('DELETE FROM attendance WHERE employee_id = 5 AND date = ? AND is_manual_correction = 1', [yesterdayStr]);
+
     // -----------------------------------------------------------------
     // TEST 6: Time Off Allocation & Approvals
     // -----------------------------------------------------------------

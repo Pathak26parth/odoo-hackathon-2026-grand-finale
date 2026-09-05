@@ -14,6 +14,10 @@ export const FaceVerificationStatus = ({
   onCancel,
   isProcessing = false
 }) => {
+  if (!verifiedData && !failureType) {
+    return null;
+  }
+
   if (failureType) {
     return (
       <div className="w-full max-w-lg mx-auto mt-4 p-5 rounded-2xl bg-white border border-rose-200 shadow-sm">
@@ -53,7 +57,18 @@ export const FaceVerificationStatus = ({
     );
   }
 
-  if (!verifiedData) return null;
+  const formatTime = (timeVal) => {
+    if (!timeVal) return null;
+    if (typeof timeVal === 'string' && (timeVal.includes('am') || timeVal.includes('pm') || timeVal.includes('AM') || timeVal.includes('PM'))) {
+      return timeVal;
+    }
+    const d = new Date(timeVal);
+    return isNaN(d.getTime()) ? String(timeVal) : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  const displayCheckInTime = formatTime(todayRecord?.checkIn || todayRecord?.check_in || todayRecord?.rawCheckIn);
+  const displayCheckOutTime = formatTime(todayRecord?.checkOut || todayRecord?.check_out || todayRecord?.rawCheckOut);
+  const isAlreadyCheckedOut = Boolean(todayRecord && (todayRecord.check_out || todayRecord.checkOut));
 
   return (
     <div className="w-full max-w-lg mx-auto mt-4 p-5 rounded-2xl bg-white border border-emerald-200 shadow-sm">
@@ -95,11 +110,29 @@ export const FaceVerificationStatus = ({
         </div>
       </div>
 
-      {/* Today's Status Callout */}
-      {hasCheckedInToday && (
-        <div className="mb-4 p-2.5 rounded-lg bg-blue-50/70 border border-blue-100 text-xs text-blue-800 flex items-center justify-between">
-          <span>Checked In at: <strong>{todayRecord?.checkIn || 'Earlier Today'}</strong></span>
-          <span className="text-[11px] text-blue-600">Ready for Check-Out</span>
+      {/* Dynamic Today's Status Callout */}
+      {hasCheckedInToday ? (
+        <div className="mb-4 p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Checked In at: <strong>{displayCheckInTime || 'Earlier Today'}</strong></span>
+          </div>
+          <span className="text-[11px] font-semibold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">Ready for Check-Out</span>
+        </div>
+      ) : isAlreadyCheckedOut ? (
+        <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between shadow-2xs">
+          <div>
+            <span>Shift Completed: Checked out at <strong>{displayCheckOutTime}</strong></span>
+            {todayRecord?.workedHours > 0 && (
+              <span className="text-emerald-700 block text-[11px] mt-0.5">Total Worked: <strong>{todayRecord.workedHours}h</strong></span>
+            )}
+          </div>
+          <span className="text-[11px] font-semibold text-emerald-700 bg-white border border-emerald-300 px-2 py-0.5 rounded-full">Checked Out ✓</span>
+        </div>
+      ) : (
+        <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center justify-between shadow-2xs">
+          <span>Shift Status: <strong>Not Checked In Yet</strong></span>
+          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">Ready for Check-In</span>
         </div>
       )}
 
@@ -113,7 +146,7 @@ export const FaceVerificationStatus = ({
             className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors disabled:opacity-50"
           >
             <LogIn className="w-4 h-4" />
-            {isProcessing ? 'Processing Check-In...' : 'CHECK IN'}
+            {isProcessing ? 'Processing Check-In...' : (isAlreadyCheckedOut ? 'CHECK IN AGAIN' : 'CHECK IN')}
           </button>
         ) : (
           <button

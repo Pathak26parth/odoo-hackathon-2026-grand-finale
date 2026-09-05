@@ -238,7 +238,11 @@ class EmployeeController {
       }
 
       // Resolve effective role for user account creation
-      const chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      let chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      // Privilege Escalation Guard: Non-admin attempt to assign ADMIN role safely defaulted to EMPLOYEE
+      if (req.user?.role !== 'ADMIN' && (String(chosenRole).toUpperCase() === 'ADMIN' || String(chosenRole) === '1')) {
+        chosenRole = 'EMPLOYEE';
+      }
       const effectiveRole = chosenRole || 'EMPLOYEE';
 
       const result = await authService.createEmployeeWithAccount({

@@ -270,16 +270,7 @@ class AttendanceController {
       }
 
       // 2. Fetch employee details and today's attendance status
-      const todayStr = new Date().toISOString().split('T')[0];
-      const todayRecords = await query(
-        `SELECT id, check_in, check_out, status, worked_hours 
-         FROM attendance 
-         WHERE employee_id = ? AND date = ? 
-         ORDER BY id DESC LIMIT 1`,
-        [employee.id, todayStr]
-      );
-      const todayRecord = todayRecords.length > 0 ? todayRecords[0] : null;
-      const hasCheckedInToday = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+      const todayStatus = await attendanceService.getTodayStatus(employee.id);
 
       // Fetch department and job position if available
       const empDetails = await query(
@@ -300,8 +291,9 @@ class AttendanceController {
           position: empInfo.job_position || 'Employee',
           profilePhotoUrl: empInfo.profile_photo_url
         },
-        hasCheckedInToday,
-        todayRecord
+        hasCheckedInToday: todayStatus.sessionStatus === 'CHECKED_IN',
+        todayRecord: todayStatus.todayRecord,
+        todayStatus
       });
     } catch (error) {
       next(error);
@@ -474,6 +466,13 @@ class AttendanceController {
         return sendError(res, 'Attendance record not found.', 404);
       }
 
+      // Check RBAC ownership if employee
+      if (req.user.role === 'EMPLOYEE' && req.user.employeeId) {
+        if (String(rows[0].employee_id) !== String(req.user.employeeId)) {
+          return sendError(res, 'Forbidden: You are strictly prohibited from viewing another employee\'s attendance record.', 403);
+        }
+      }
+
       return sendSuccess(res, 'Attendance details retrieved', rows[0]);
     } catch (error) {
       next(error);
@@ -536,6 +535,184 @@ class AttendanceController {
 
       const logs = await query(sql, params);
       return sendSuccess(res, 'Face verification logs retrieved', logs);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get Live Attendance Status for Logged-In Employee
+   * GET /api/attendance/my-status
+   */
+  async getMyStatus(req, res, next) {
+    try {
+      const employee = await this._resolveAuthorizedEmployee(req, req.query.employeeId);
+      const status = await attendanceService.getTodayStatus(employee.id);
+      return sendSuccess(res, 'Live attendance status retrieved', status);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get Attendance History for Logged-In Employee
+   * GET /api/attendance/my-history
+   */
+  async getMyHistory(req, res, next) {
+    try {
+      const employee = await this._resolveAuthorizedEmployee(req, req.query.employeeId);
+      const history = await attendanceService.getEmployeeHistory(employee.id, req.query);
+      return sendSuccess(res, 'Attendance history retrieved', history);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Submit Attendance Correction Request (Employee)
+   * POST /api/attendance/correction-requests
+   */
+  async createCorrectionRequest(req, res, next) {
+    try {
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
+      const { attendanceId, requestDate, proposedCheckIn, proposedCheckOut, reason } = req.body;
+
+      const result = await attendanceService.createCorrectionRequest({
+        employeeId: employee.id,
+        attendanceId,
+        requestDate,
+        proposedCheckIn,
+        proposedCheckOut,
+        reason
+      });
+
+      return sendSuccess(res, result.message, result, 201);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * List Attendance Correction Requests
+   * GET /api/attendance/correction-requests
+   */
+  async getCorrectionRequests(req, res, next) {
+    try {
+      const isHR =
+        req.user.role === 'ADMIN' ||
+        req.user.role === 'HR_MANAGER' ||
+        req.user.role === 'HR_PAYROLL_ADMIN' ||
+        req.user.role === 'HR_PAYROLL_USER';
+
+      let employeeIdToQuery = req.query.employeeId;
+      if (!isHR) {
+        employeeIdToQuery = req.user.employeeId;
+      }
+
+      const rawStatus = req.query.status;
+      const cleanStatus = (rawStatus && rawStatus !== 'All' && rawStatus !== 'undefined' && rawStatus !== 'null')
+        ? rawStatus
+        : undefined;
+
+      const result = await attendanceService.getCorrectionRequests({
+        employeeId: employeeIdToQuery,
+        status: cleanStatus,
+        page: req.query.page,
+        limit: req.query.limit
+      });
+
+      return sendSuccess(res, 'Attendance correction requests retrieved', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get Single Correction Request by ID
+   * GET /api/attendance/correction-requests/:id
+   */
+  async getCorrectionRequestById(req, res, next) {
+    try {
+      const { id } = req.params;
+      const request = await attendanceService.getCorrectionRequestById(id);
+
+      const isHR =
+        req.user.role === 'ADMIN' ||
+        req.user.role === 'HR_MANAGER' ||
+        req.user.role === 'HR_PAYROLL_ADMIN' ||
+        req.user.role === 'HR_PAYROLL_USER';
+
+      if (!isHR && String(request.employee_id) !== String(req.user.employeeId)) {
+        return sendError(res, 'Forbidden: You are strictly prohibited from viewing another employee\'s correction request.', 403);
+      }
+
+      return sendSuccess(res, 'Attendance correction request details retrieved', request);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Approve Attendance Correction Request (HR/Admin only)
+   * POST /api/attendance/correction-requests/:id/approve
+   */
+  async approveCorrectionRequest(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reviewerNotes } = req.body;
+
+      const result = await attendanceService.approveCorrectionRequest({
+        requestId: id,
+        reviewerUserId: req.user.id,
+        reviewerNotes,
+        userIp: req.ip,
+        userAgent: req.headers['user-agent'] || ''
+      });
+
+      return sendSuccess(res, result.message, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Reject Attendance Correction Request (HR/Admin only)
+   * POST /api/attendance/correction-requests/:id/reject
+   */
+  async rejectCorrectionRequest(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reviewerNotes } = req.body;
+
+      const result = await attendanceService.rejectCorrectionRequest({
+        requestId: id,
+        reviewerUserId: req.user.id,
+        reviewerNotes,
+        userIp: req.ip,
+        userAgent: req.headers['user-agent'] || ''
+      });
+
+      return sendSuccess(res, result.message, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Cancel Attendance Correction Request (Employee only)
+   * POST /api/attendance/correction-requests/:id/cancel
+   */
+  async cancelCorrectionRequest(req, res, next) {
+    try {
+      const { id } = req.params;
+      const employee = await this._resolveAuthorizedEmployee(req, req.body.employeeId);
+
+      const result = await attendanceService.cancelCorrectionRequest({
+        requestId: id,
+        employeeId: employee.id
+      });
+
+      return sendSuccess(res, result.message, result);
     } catch (error) {
       next(error);
     }
