@@ -1,6 +1,7 @@
 const app = require('./app');
 const env = require('./config/env');
 const { testConnection } = require('./config/db');
+const aiProcessManager = require('./services/aiProcessManager');
 
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]', err.message, err.stack);
@@ -29,6 +30,11 @@ async function startServer() {
     console.log('================================================================\n');
   });
 
+  // Ensure Python Face Biometrics microservice is running
+  aiProcessManager.ensureAiService().catch((err) => {
+    console.warn('[Face AI] Auto-start check note:', err.message);
+  });
+
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`[Server Error] Port ${env.PORT} is already in use by another process.`);
@@ -40,6 +46,7 @@ async function startServer() {
   // Graceful shutdown handling
   const shutdown = () => {
     console.log('\n[Server] Shutting down gracefully...');
+    aiProcessManager.stop();
     server.close(() => {
       console.log('[Server] Closed remaining connections. Exited.');
       process.exit(0);
