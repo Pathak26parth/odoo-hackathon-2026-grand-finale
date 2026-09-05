@@ -13,7 +13,18 @@ router.get('/me', requireAuth, (req, res, next) => employeeController.getMeEmplo
 router.get('/', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_READ), (req, res, next) => employeeController.getAllEmployees(req, res, next));
 router.get('/:id', requireAuth, requireSelfOrAdmin(req => req.params.id), (req, res, next) => employeeController.getEmployeeById(req, res, next));
 router.post('/', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_CREATE), validateCreateEmployee, (req, res, next) => employeeController.createEmployee(req, res, next));
-router.put('/:id', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_UPDATE), (req, res, next) => employeeController.updateEmployee(req, res, next));
+router.put('/:id', requireAuth, (req, res, next) => {
+  if (
+    req.user.role === 'ADMIN' ||
+    req.user.role === 'HR_MANAGER' ||
+    req.user.role === 'HR_PAYROLL_ADMIN' ||
+    req.user.permissions?.includes(PERMISSIONS.EMPLOYEES_UPDATE) ||
+    (req.user.employeeId && (String(req.user.employeeId) === String(req.params.id) || req.user.employeeCode === req.params.id))
+  ) {
+    return employeeController.updateEmployee(req, res, next);
+  }
+  return sendError(res, 'Forbidden: You do not have permission to update this employee.', 403);
+});
 router.delete('/:id', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_DELETE), (req, res, next) => employeeController.deleteEmployee(req, res, next));
 
 // Smart Button Related Record Sub-Resources

@@ -37,7 +37,14 @@ const env = {
   SMTP_PASSWORD: process.env.SMTP_PASSWORD || '',
   MAIL_FROM: process.env.MAIL_FROM || 'PeoplePay360 <no-reply@peoplepay360.com>',
 
+  // Cloudinary Cloud Storage
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
 
+  // Python AI Face Service
+  FACE_SERVICE_URL: process.env.FACE_SERVICE_URL || 'http://localhost:8000'
 };
 
 module.exports = env;
+

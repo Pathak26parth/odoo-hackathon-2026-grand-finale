@@ -76,7 +76,36 @@ export const createEmployee = async (data) => {
 export const updateEmployee = async (id, data) => {
   try {
     const res = await employeeService.updateEmployee(id, data);
-    await fetchEmployeesAsync();
+    const refreshed = await fetchEmployeesAsync();
+
+    // Check if Cloudinary URL was returned
+    const returnedPhoto = res?.data?.profilePhotoUrl || res?.data?.avatar || res?.profilePhotoUrl || res?.avatar;
+
+    // Synchronize current logged-in user profile if this employee matches
+    try {
+      const userRaw = localStorage.getItem('peoplepay360_current_user');
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        if (
+          String(u.internalEmployeeId) === String(id) ||
+          u.employeeId === id ||
+          (data.email && u.email === data.email)
+        ) {
+          if (returnedPhoto) {
+            u.avatar = returnedPhoto;
+          } else if (data.avatar && !data.avatar.startsWith('data:')) {
+            u.avatar = data.avatar;
+          }
+          if (data.firstName && data.lastName) {
+            u.name = `${data.firstName} ${data.lastName}`;
+          }
+          localStorage.setItem('peoplepay360_current_user', JSON.stringify(u));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not sync current user local cache:', e);
+    }
+
     return res;
   } catch (err) {
     console.error('Update employee failed on backend:', err.message);

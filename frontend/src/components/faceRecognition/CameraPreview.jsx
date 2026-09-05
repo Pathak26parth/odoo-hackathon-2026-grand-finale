@@ -1,17 +1,59 @@
-// components/faceRecognition/CameraPreview.jsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { Camera, CameraOff, RefreshCw, AlertTriangle } from 'lucide-react';
 
-export const CameraPreview = ({
+export const CameraPreview = forwardRef(({
   isActive = true,
   onStreamReady,
   onError,
   children
-}) => {
+}, ref) => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [cameraState, setCameraState] = useState('initializing'); // initializing, active, denied, error
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Expose captureFrame method to parent components
+  useImperativeHandle(ref, () => ({
+    captureFrame: () => {
+      try {
+        if (videoRef.current && videoRef.current.videoWidth > 0) {
+          const video = videoRef.current;
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 480;
+          const ctx = canvas.getContext('2d');
+          // Un-mirror image
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          // Fast sampling brightness check
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imgData.data;
+          let totalBrightness = 0;
+          const sampleStep = Math.max(1, Math.floor(data.length / 5000));
+          let count = 0;
+          for (let i = 0; i < data.length; i += 4 * sampleStep) {
+            totalBrightness += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            count++;
+          }
+          const avgBrightness = count > 0 ? totalBrightness / count : 0;
+          const isBlack = avgBrightness < 15;
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+          return {
+            dataUrl,
+            avgBrightness,
+            isBlack
+          };
+        }
+      } catch (e) {
+        console.warn('Frame capture from video canvas failed:', e);
+      }
+      return null;
+    },
+    getCameraState: () => cameraState
+  }));
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -167,4 +209,6 @@ export const CameraPreview = ({
       </div>
     </div>
   );
-};
+});
+
+CameraPreview.displayName = 'CameraPreview';

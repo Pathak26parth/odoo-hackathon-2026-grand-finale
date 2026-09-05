@@ -124,6 +124,18 @@ class FaceDetector:
             FileNotFoundError: If the specified file path does not exist.
         """
         if isinstance(image_input, (str, Path)):
+            path_str = str(image_input)
+            # If data URL directly passed
+            if path_str.startswith("data:image"):
+                import base64
+                clean = path_str.split(",", 1)[1] if "," in path_str else path_str
+                padded = clean + "=" * (-len(clean) % 4)
+                raw_bytes = base64.b64decode(padded)
+                buf = np.frombuffer(raw_bytes, dtype=np.uint8)
+                img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+                if img is not None and img.size > 0:
+                    return img
+
             path_obj = Path(image_input)
             if not path_obj.exists():
                 raise FileNotFoundError(f"Image file not found: {path_obj}")
@@ -156,8 +168,11 @@ class FaceDetector:
                 except Exception as e:
                     logger.warning("Failed to render PDF page via pypdfium2: %s", e)
 
-            # cv2.imread supports common formats (JPG, PNG, WebP, TIFF, BMP)
-            img = cv2.imread(str(path_obj))
+            # Robust cv2.imdecode via binary buffer (supports Windows unicode & locked temp files)
+            with open(str(path_obj), "rb") as f:
+                raw_bytes = f.read()
+            buf = np.frombuffer(raw_bytes, dtype=np.uint8)
+            img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
             if img is None or img.size == 0:
                 raise ValueError(f"Failed to decode or read image from file: {path_obj}")
             return img

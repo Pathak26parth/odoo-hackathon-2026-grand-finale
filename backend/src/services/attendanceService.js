@@ -7,10 +7,34 @@ const STATUSES = require('../constants/statuses');
  */
 class AttendanceService {
   /**
+   * Resolve employee record by ID, employee_code, or email
+   * @param {string|number} identifier
+   * @returns {Promise<{id: number, employee_code: string, first_name: string, last_name: string}|null>}
+   */
+  async resolveEmployee(identifier) {
+    if (!identifier) return null;
+    const cleanStr = String(identifier).trim();
+    if (typeof identifier === 'number' || (/^\d+$/.test(cleanStr))) {
+      const rows = await query('SELECT id, employee_code, first_name, last_name FROM employees WHERE id = ?', [parseInt(cleanStr, 10)]);
+      if (rows.length > 0) return rows[0];
+    }
+    const rows = await query('SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? OR email = ?', [cleanStr, cleanStr]);
+    if (rows.length > 0) return rows[0];
+    return null;
+  }
+
+  /**
    * Process Employee Check-In
    * @param {Object} params - { employeeId, verificationMethod, dateStr, checkInDateTime }
    */
   async checkIn({ employeeId, verificationMethod = 'PORTAL', checkInTime = new Date() }) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      const err = new Error(`Employee record not found for "${employeeId}".`);
+      err.statusCode = 404;
+      throw err;
+    }
+    const actualEmpId = employee.id;
     const todayStr = checkInTime.toISOString().split('T')[0];
 
     // 1. Check if employee already has an active (unclosed) check-in today
@@ -18,7 +42,7 @@ class AttendanceService {
       `SELECT id, check_in, check_out FROM attendance 
        WHERE employee_id = ? AND date = ? AND check_out IS NULL
        LIMIT 1`,
-      [employeeId, todayStr]
+      [actualEmpId, todayStr]
     );
 
     if (existing.length > 0) {
@@ -34,7 +58,7 @@ class AttendanceService {
        LEFT JOIN working_schedules ws ON e.working_schedule_id = ws.id
        LEFT JOIN working_schedule_days wsd ON ws.id = wsd.schedule_id AND wsd.day_of_week = UPPER(DAYNAME(?))
        WHERE e.id = ?`,
-      [todayStr, employeeId]
+      [todayStr, actualEmpId]
     );
 
     let status = STATUSES.ATTENDANCE.PRESENT;
@@ -62,11 +86,13 @@ class AttendanceService {
     const insertResult = await query(
       `INSERT INTO attendance (employee_id, date, check_in, status, expected_hours, verification_method)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [employeeId, todayStr, checkInTime, status, expectedHours, verificationMethod]
+      [actualEmpId, todayStr, checkInTime, status, expectedHours, verificationMethod]
     );
 
     return {
       attendanceId: insertResult.insertId,
+      employeeId: actualEmpId,
+      employeeCode: employee.employee_code,
       date: todayStr,
       checkIn: checkInTime,
       status,
@@ -81,6 +107,13 @@ class AttendanceService {
    * @param {Object} params - { employeeId, verificationMethod, checkOutTime }
    */
   async checkOut({ employeeId, verificationMethod = 'PORTAL', checkOutTime = new Date() }) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      const err = new Error(`Employee record not found for "${employeeId}".`);
+      err.statusCode = 404;
+      throw err;
+    }
+    const actualEmpId = employee.id;
     const todayStr = checkOutTime.toISOString().split('T')[0];
 
     // 1. Find open attendance record for today (or most recent open record)
@@ -90,7 +123,7 @@ class AttendanceService {
        WHERE employee_id = ? AND check_out IS NULL 
        ORDER BY check_in DESC 
        LIMIT 1`,
-      [employeeId]
+      [actualEmpId]
     );
 
     if (openRows.length === 0) {

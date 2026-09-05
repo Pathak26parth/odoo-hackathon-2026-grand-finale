@@ -1,5 +1,5 @@
 // pages/attendance/FaceCheckIn.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CameraPreview } from '../../components/faceRecognition/CameraPreview';
 import { FaceDetectionFrame } from '../../components/faceRecognition/FaceDetectionFrame';
 import { FaceVerificationStatus } from '../../components/faceRecognition/FaceVerificationStatus';
@@ -8,18 +8,15 @@ import {
   logFaceAttendanceEvent,
   FACE_ATTENDANCE_PRIVACY_NOTICE
 } from '../../services/faceRecognitionService';
-import {
-  getAttendanceRecords,
-  createAttendance,
-  updateAttendance,
-  calculateWorkedHours
-} from '../../data/attendance';
-import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import attendanceService from '../../services/attendanceService';
+import employeeService from '../../services/employeeService';
+import { getEmployees } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldCheck, Sparkles, Clock, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Sparkles, Clock, Calendar as CalendarIcon, CheckCircle2, User, RefreshCw } from 'lucide-react';
 
 export const FaceCheckIn = () => {
   const { currentUser } = useAuth();
+  const cameraRef = useRef(null);
 
   // Clock state
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -27,6 +24,10 @@ export const FaceCheckIn = () => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Employees list for Kiosk selection
+  const [employees, setEmployees] = useState(getEmployees());
+  const [selectedEmployeeCode, setSelectedEmployeeCode] = useState('');
 
   // Kiosk face detection state machine:
   // 'Camera Ready' | 'Looking for Face' | 'Face Detected' | 'Verifying Identity' | 'Identity Verified' | 'Verification Failed'
@@ -36,49 +37,92 @@ export const FaceCheckIn = () => {
   const [failureMessage, setFailureMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
+  const [todayRecordState, setTodayRecordState] = useState(null);
+  const [hasCheckedInTodayState, setHasCheckedInTodayState] = useState(false);
 
-  const [employees, setEmployees] = useState(getEmployees());
-
+  // Load employees from backend
   useEffect(() => {
-    fetchEmployeesAsync().then((list) => {
-      if (Array.isArray(list)) setEmployees(list);
-    }).catch(console.error);
-  }, []);
+    let mounted = true;
+    const loadEmps = async () => {
+      try {
+        const empList = await employeeService.getAllEmployees();
+        if (mounted && Array.isArray(empList) && empList.length > 0) {
+          const mapped = empList.map((e) => ({
+            id: String(e.id),
+            employeeId: e.employeeId || e.employee_code || `EMP-${String(e.id).padStart(3, '0')}`,
+            name: e.name || `${e.first_name || ''} ${e.last_name || ''}`.trim() || 'Employee',
+            department: e.department || e.department_name || 'General',
+            position: e.position || e.job_position || 'Staff',
+            avatar: e.avatar || e.profile_photo_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+          }));
+          setEmployees(mapped);
 
-  // Determine current active employee to check in
-  const targetEmployee = employees.find(
-    (e) => e.employeeId === currentUser?.employeeId || String(e.id) === String(currentUser?.employeeId)
-  ) || employees[0];
-  const targetEmployeeId = targetEmployee?.employeeId || targetEmployee?.id || '';
+          // Default to current user's employee code or first employee
+          const currentCode = currentUser?.employeeId;
+          const match = mapped.find(e => e.employeeId === currentCode || e.id === currentUser?.id);
+          if (match) {
+            setSelectedEmployeeCode(match.employeeId);
+          } else {
+            setSelectedEmployeeCode(mapped[0].employeeId);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load employees from API, using fallback:', err.message);
+      }
+    };
+    loadEmps();
+    return () => { mounted = false; };
+  }, [currentUser]);
 
-  // Check today's attendance record
-  const todayStr = currentTime.toISOString().split('T')[0];
-  const allRecords = getAttendanceRecords();
-  const todayRecord = allRecords.find(
-    (r) =>
-      (r.employeeId === targetEmployeeId || (targetEmployee?.id && String(r.employeeId) === String(targetEmployee.id))) &&
-      r.date === todayStr
-  );
-  const hasCheckedInToday = Boolean(todayRecord && todayRecord.checkIn && !todayRecord.checkOut);
+  // Fallback initial selection if employees already populated
+  useEffect(() => {
+    if (!selectedEmployeeCode && employees.length > 0) {
+      const currentCode = currentUser?.employeeId;
+      const match = employees.find(e => e.employeeId === currentCode || e.id === currentUser?.id);
+      setSelectedEmployeeCode(match ? match.employeeId : employees[0].employeeId);
+    }
+  }, [employees, currentUser, selectedEmployeeCode]);
 
-  // Trigger automated face detection and verification simulation
-  const handleStartScan = async () => {
+  // Trigger automated face detection and 1:1 verification
+  const handleStartScan = async (empCodeToScan) => {
+    const targetCode = empCodeToScan || selectedEmployeeCode || employees[0]?.employeeId || 'EMP-001';
+    
     setFailureType(null);
     setFailureMessage('');
     setVerifiedData(null);
     setSuccessToast(null);
 
     setDetectionState('Looking for Face');
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 600));
 
     setDetectionState('Face Detected');
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 500));
 
     setDetectionState('Verifying Identity');
     try {
-      const result = await verifyFace(targetEmployeeId);
+      // Capture live frame from camera preview
+      const captureResult = cameraRef.current?.captureFrame();
+      const frame = typeof captureResult === 'object' && captureResult?.dataUrl ? captureResult.dataUrl : (typeof captureResult === 'string' ? captureResult : null);
+
+      if (captureResult?.isBlack) {
+        setFailureType('No Face Detected');
+        setFailureMessage('Camera frame is completely black or obscured. Please ensure your camera is uncovered and face is clearly visible.');
+        setDetectionState('Verification Failed');
+        return;
+      }
+
+      if (!frame || typeof frame !== 'string' || !frame.startsWith('data:image')) {
+        setFailureType('Camera Frame Unavailable');
+        setFailureMessage('Cannot read frame from camera. Please allow camera permissions and ensure video feed is active.');
+        setDetectionState('Verification Failed');
+        return;
+      }
+
+      const result = await verifyFace(targetCode, frame);
       if (result.success) {
         setVerifiedData(result);
+        setTodayRecordState(result.todayRecord);
+        setHasCheckedInTodayState(result.hasCheckedInToday);
         setDetectionState('Identity Verified');
       } else {
         setFailureType(result.errorType || 'Verification Failed');
@@ -94,46 +138,40 @@ export const FaceCheckIn = () => {
 
   // Start initial scan on mount
   useEffect(() => {
-    const initTimer = setTimeout(() => {
-      handleStartScan();
-    }, 1000);
-    return () => clearTimeout(initTimer);
-  }, []);
+    if (selectedEmployeeCode) {
+      const initTimer = setTimeout(() => {
+        handleStartScan(selectedEmployeeCode);
+      }, 800);
+      return () => clearTimeout(initTimer);
+    }
+  }, [selectedEmployeeCode]);
 
   // Handle Check In
   const handleCheckIn = async () => {
     if (!verifiedData) return;
     setIsProcessing(true);
 
-    const timeStr = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const formattedDisplayTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
     try {
-      // Create record in main attendance store
-      await createAttendance({
-        employeeId: verifiedData.internalId || verifiedData.employeeId || targetEmployee?.id || '',
-        employeeName: verifiedData.employeeName,
-        department: verifiedData.department,
-        date: todayStr,
-        checkIn: timeStr,
-        checkOut: '',
-        status: 'Present',
-        attendanceMethod: 'Face Recognition',
-        faceVerified: true,
-        verificationConfidence: 98.7,
-        notes: 'Verified via Face Recognition kiosk.'
-      });
+      const frame = cameraRef.current?.captureFrame() || 'live_camera_punch_frame';
+      const targetEmp = verifiedData.employeeId || selectedEmployeeCode;
 
-      // Add to face history
+      // 1. Call real backend check-in endpoint
+      await attendanceService.faceCheckIn(frame, targetEmp);
+
+      // 2. Add to face history log
       await logFaceAttendanceEvent(verifiedData, 'Check In');
 
+      setHasCheckedInTodayState(true);
       setSuccessToast({
-        title: '✓ Check-in Successful',
+        title: `✓ Check-in Successful for ${verifiedData.employeeName}`,
         time: formattedDisplayTime,
         type: 'Check In'
       });
+      setDetectionState('Camera Ready');
     } catch (err) {
-      alert('Error recording check in: ' + err.message);
+      alert('Error recording check in: ' + (err.message || 'Server error'));
     } finally {
       setIsProcessing(false);
     }
@@ -141,36 +179,38 @@ export const FaceCheckIn = () => {
 
   // Handle Check Out
   const handleCheckOut = async () => {
-    if (!verifiedData || !todayRecord) return;
+    if (!verifiedData) return;
     setIsProcessing(true);
 
-    const timeStr = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const formattedDisplayTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-    const worked = calculateWorkedHours(todayRecord.checkIn, timeStr);
 
     try {
-      await updateAttendance(todayRecord.id, {
-        checkOut: timeStr,
-        workedHours: worked.formatted,
-        status: 'Present',
-        notes: `${todayRecord.notes || ''} | Face check-out verified.`
-      });
+      const frame = cameraRef.current?.captureFrame() || 'live_camera_punch_frame';
+      const targetEmp = verifiedData.employeeId || selectedEmployeeCode;
 
-      // Add to face history
+      // 1. Call real backend check-out endpoint
+      const punchRes = await attendanceService.faceCheckOut(frame, targetEmp);
+      const workedStr = punchRes?.data?.workedHours || punchRes?.workedHours || 'Calculated';
+
+      // 2. Add to face history log
       await logFaceAttendanceEvent(verifiedData, 'Check Out');
 
+      setHasCheckedInTodayState(false);
       setSuccessToast({
-        title: '✓ Check-out Successful',
+        title: `✓ Check-out Successful for ${verifiedData.employeeName}`,
         time: formattedDisplayTime,
-        workedHours: worked.formatted,
+        workedHours: workedStr,
         type: 'Check Out'
       });
+      setDetectionState('Camera Ready');
     } catch (err) {
-      alert('Error recording check out: ' + err.message);
+      alert('Error recording check out: ' + (err.message || 'Server error'));
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const selectedEmployeeObj = employees.find(e => e.employeeId === selectedEmployeeCode) || employees[0];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -179,10 +219,10 @@ export const FaceCheckIn = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-blue-600" />
-            Face Attendance
+            Face Attendance Kiosk
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Instant contactless identity verification and kiosk attendance logging.
+            Instant biometric face verification and kiosk attendance check-in / check-out.
           </p>
         </div>
 
@@ -207,6 +247,61 @@ export const FaceCheckIn = () => {
         </div>
       </div>
 
+      {/* Employee Selector Bar */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <img
+            src={
+              selectedEmployeeObj?.avatar ||
+              'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+            }
+            alt={selectedEmployeeObj?.name || 'Employee'}
+            className="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
+          />
+          <div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="kiosk-employee-select" className="text-xs font-bold text-slate-900 block">
+                {selectedEmployeeObj?.name || 'Punching Employee'}
+              </label>
+              <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                {selectedEmployeeObj?.employeeId || selectedEmployeeCode}
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-500 block mt-0.5">
+              Matching live face against registered employee profile photo
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            id="kiosk-employee-select"
+            value={selectedEmployeeCode}
+            onChange={(e) => {
+              const newCode = e.target.value;
+              setSelectedEmployeeCode(newCode);
+              handleStartScan(newCode);
+            }}
+            className="px-3 py-2 text-xs font-medium rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-56"
+          >
+            {employees.map((emp) => (
+              <option key={emp.employeeId || emp.id} value={emp.employeeId}>
+                {emp.name} ({emp.employeeId}) — {emp.department}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => handleStartScan(selectedEmployeeCode)}
+            className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 transition-colors shrink-0"
+            title="Re-scan face"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Success Banner */}
       {successToast && (
         <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between shadow-2xs">
@@ -224,7 +319,7 @@ export const FaceCheckIn = () => {
           </div>
           <button
             type="button"
-            onClick={() => handleStartScan()}
+            onClick={() => handleStartScan(selectedEmployeeCode)}
             className="px-3 py-1.5 text-xs font-medium text-emerald-800 bg-white hover:bg-emerald-100 rounded-lg border border-emerald-300 transition-colors"
           >
             Next Employee
@@ -234,7 +329,7 @@ export const FaceCheckIn = () => {
 
       {/* Main Kiosk Area */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
-        <CameraPreview isActive={true}>
+        <CameraPreview ref={cameraRef} isActive={true}>
           <FaceDetectionFrame state={detectionState} />
         </CameraPreview>
 
@@ -243,11 +338,11 @@ export const FaceCheckIn = () => {
           verifiedData={verifiedData}
           failureType={failureType}
           failureMessage={failureMessage}
-          hasCheckedInToday={hasCheckedInToday}
-          todayRecord={todayRecord}
+          hasCheckedInToday={hasCheckedInTodayState}
+          todayRecord={todayRecordState}
           onCheckIn={handleCheckIn}
           onCheckOut={handleCheckOut}
-          onRetry={handleStartScan}
+          onRetry={() => handleStartScan(selectedEmployeeCode)}
           onCancel={() => setDetectionState('Camera Ready')}
           isProcessing={isProcessing}
         />
@@ -261,3 +356,4 @@ export const FaceCheckIn = () => {
     </div>
   );
 };
+

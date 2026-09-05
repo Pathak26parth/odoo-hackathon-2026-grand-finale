@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { query } = require('../config/db');
 const env = require('../config/env');
 const STATUSES = require('../constants/statuses');
+const cloudinaryService = require('./cloudinaryService');
 
 /**
  * Biometric Face Verification Service
@@ -28,10 +29,56 @@ class FaceVerificationService {
   }
 
   /**
+   * Resolve employee record by ID, employee_code, or email
+   * @param {string|number} identifier
+   * @returns {Promise<{id: number, employee_code: string, first_name: string, last_name: string, profile_photo_url: string}|null>}
+   */
+  async resolveEmployee(identifier) {
+    if (!identifier) return null;
+    const cleanStr = String(identifier).trim();
+    if (typeof identifier === 'number' || (/^\d+$/.test(cleanStr))) {
+      const rows = await query('SELECT id, employee_code, first_name, last_name, profile_photo_url FROM employees WHERE id = ?', [parseInt(cleanStr, 10)]);
+      if (rows.length > 0) return rows[0];
+    }
+    const rows = await query('SELECT id, employee_code, first_name, last_name, profile_photo_url FROM employees WHERE employee_code = ? OR email = ?', [cleanStr, cleanStr]);
+    if (rows.length > 0) return rows[0];
+    return null;
+  }
+
+  /**
    * Enroll an employee's face template
    * @param {Object} params - { employeeId, faceEmbeddingOrImage, livenessScore }
    */
   async enrollFace({ employeeId, faceEmbeddingOrImage, livenessScore = 0.98 }) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      const err = new Error(`Employee record not found for "${employeeId}".`);
+      err.statusCode = 404;
+      throw err;
+    }
+    const actualEmpId = employee.id;
+
+    let uploadedPhotoUrl = null;
+
+    // If input is a base64 camera capture, upload directly to Cloudinary
+    if (faceEmbeddingOrImage && typeof faceEmbeddingOrImage === 'string' && cloudinaryService.isBase64Image(faceEmbeddingOrImage)) {
+      try {
+        uploadedPhotoUrl = await cloudinaryService.uploadImage(
+          faceEmbeddingOrImage,
+          'peoplepay360/faces',
+          `face_${actualEmpId}_${Date.now()}`
+        );
+        // Persist real photo URL in employee record
+        await query('UPDATE employees SET profile_photo_url = ?, updated_at = NOW() WHERE id = ?', [
+          uploadedPhotoUrl,
+          actualEmpId
+        ]);
+        employee.profile_photo_url = uploadedPhotoUrl;
+      } catch (uploadErr) {
+        console.warn('[FaceEnroll] Cloudinary face photo upload warning:', uploadErr.message);
+      }
+    }
+
     // Generate secure hash of biometric template/embedding
     const templateHash = crypto
       .createHash('sha256')
@@ -48,19 +95,41 @@ class FaceVerificationService {
         updated_at = NOW();
     `;
 
-    await query(sql, [employeeId, templateHash, livenessScore]);
+    await query(sql, [actualEmpId, templateHash, livenessScore]);
+
+    // Notify Python AI microservice to index the face template
+    try {
+      const imgToRegister = uploadedPhotoUrl || (typeof faceEmbeddingOrImage === 'string' && (faceEmbeddingOrImage.startsWith('http') || faceEmbeddingOrImage.startsWith('data:image')) ? faceEmbeddingOrImage : employee.profile_photo_url);
+      if (imgToRegister && (imgToRegister.startsWith('data:image') || imgToRegister.startsWith('http'))) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        await fetch(`${env.FACE_SERVICE_URL}/api/face/enroll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: imgToRegister,
+            employee_id: employee.employee_code || String(actualEmpId)
+          }),
+          signal: controller.signal
+        }).catch(() => {});
+        clearTimeout(timeoutId);
+      }
+    } catch (e) {
+      console.warn('[FaceEnroll] Python microservice sync note:', e.message);
+    }
 
     // Record audit log
     await query(
       `INSERT INTO audit_logs (action, module, record_id, description)
        VALUES ('FACE_ENROLLED', 'Face', ?, 'Employee completed face attendance enrollment')`,
-      [String(employeeId)]
+      [String(actualEmpId)]
     );
 
     return {
       success: true,
       enrollmentStatus: 'ACTIVE',
       templateHash,
+      profilePhotoUrl: uploadedPhotoUrl || employee.profile_photo_url,
       message: 'Face enrolled successfully for biometric attendance.'
     };
   }
@@ -69,9 +138,14 @@ class FaceVerificationService {
    * Check employee enrollment status
    */
   async getEnrollmentStatus(employeeId) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      return { isEnrolled: false, status: 'NOT_ENROLLED' };
+    }
+
     const rows = await query(
       'SELECT id, employee_id, enrollment_status, liveness_score, enrolled_at, updated_at FROM face_enrollments WHERE employee_id = ?',
-      [employeeId]
+      [employee.id]
     );
 
     if (rows.length === 0) {
@@ -92,45 +166,92 @@ class FaceVerificationService {
    * @param {Object} params - { employeeId, verificationType, faceInput, deviceInfo }
    */
   async verifyFace({ employeeId, verificationType = 'CHECK_IN', faceInput, deviceInfo = 'WebCam/Kiosk' }) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      return {
+        verified: false,
+        status: 'REJECTED',
+        message: `Employee record not found for "${employeeId}".`
+      };
+    }
+    const actualEmpId = employee.id;
+
     // 1. Verify enrollment exists and is ACTIVE
-    const enrollmentRows = await query(
+    let enrollmentRows = await query(
       'SELECT fe.*, e.profile_photo_url, e.employee_code FROM face_enrollments fe JOIN employees e ON fe.employee_id = e.id WHERE fe.employee_id = ? AND fe.enrollment_status = "ACTIVE"',
-      [employeeId]
+      [actualEmpId]
     );
 
     if (enrollmentRows.length === 0) {
-      // Log failed attempt
+      // Auto-enroll if employee exists on file
+      try {
+        await this.enrollFace({
+          employeeId: actualEmpId,
+          faceEmbeddingOrImage: faceInput || employee.profile_photo_url || `template_${actualEmpId}_auto`,
+          livenessScore: 0.985
+        });
+        enrollmentRows = [{
+          employee_id: actualEmpId,
+          employee_code: employee.employee_code,
+          profile_photo_url: employee.profile_photo_url
+        }];
+      } catch (enrollErr) {
+        console.warn('[FaceVerify] Auto-enrollment error:', enrollErr.message);
+        await this.logVerification({
+          employeeId: actualEmpId,
+          verificationType,
+          status: STATUSES.FACE_LOG.REJECTED,
+          livenessVerified: false,
+          failureReason: 'Employee has no active face enrollment on file.',
+          deviceInfo
+        });
+
+        return {
+          verified: false,
+          status: 'REJECTED',
+          message: 'Face attendance is not enrolled for this employee. Please complete face enrollment in your profile.'
+        };
+      }
+    }
+
+    const enrollment = enrollmentRows[0];
+    let similarityScore = 0.0;
+    let isLive = true;
+    let matchSuccess = false;
+    let failureMsg = 'Face identity verification failed. Face does not match registered profile photo.';
+
+    // 2. Validate input image payload
+    if (!faceInput || typeof faceInput !== 'string' || (!faceInput.startsWith('data:image') && !faceInput.startsWith('http') && !faceInput.endsWith('.jpg') && !faceInput.endsWith('.png'))) {
       await this.logVerification({
-        employeeId,
+        employeeId: actualEmpId,
         verificationType,
-        status: STATUSES.FACE_LOG.REJECTED,
+        status: STATUSES.FACE_LOG.FAILED,
         livenessVerified: false,
-        failureReason: 'Employee has no active face enrollment on file.',
+        similarityScore: 0.0,
+        failureReason: 'Invalid or missing camera frame input.',
         deviceInfo
       });
 
       return {
         verified: false,
-        status: 'REJECTED',
-        message: 'Face attendance is not enrolled for this employee. Please complete face enrollment in your profile.'
+        status: 'FAILED',
+        similarityScore: 0.0,
+        message: 'Invalid camera frame capture. Please ensure your camera is active and well-lit.'
       };
     }
 
-    const enrollment = enrollmentRows[0];
-    let similarityScore = 0.945;
-    let isLive = true;
-    let matchSuccess = true;
-
-    // 2. Call Python Microservice if available
+    // 3. Call Python InsightFace / ArcFace Microservice
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
+      const registeredImg = enrollment.profile_photo_url || faceInput;
+
       const pyResponse = await fetch(`${env.FACE_SERVICE_URL}/api/face/attendance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          registered_image: enrollment.profile_photo_url || faceInput,
+          registered_image: registeredImg,
           live_image: faceInput,
           employee_id: enrollment.employee_code,
           action: verificationType
@@ -140,28 +261,34 @@ class FaceVerificationService {
 
       clearTimeout(timeoutId);
 
+      const pyResult = await pyResponse.json().catch(() => ({}));
+
       if (pyResponse.ok) {
-        const pyResult = await pyResponse.json();
-        if (pyResult.data) {
-          similarityScore = pyResult.data.similarity || pyResult.data.confidence || 0.95;
+        if (pyResult.success === false) {
+          matchSuccess = false;
+          failureMsg = pyResult.error?.message || pyResult.message || 'Face biometrics analysis failed.';
+        } else if (pyResult.data) {
+          similarityScore = pyResult.data.similarity || 0.0;
+          matchSuccess = pyResult.data.match === true;
           isLive = pyResult.data.liveness !== false;
-          matchSuccess = pyResult.data.match !== false;
         } else if (pyResult.match !== undefined) {
-          similarityScore = pyResult.similarity || 0.95;
+          similarityScore = pyResult.similarity || 0.0;
+          matchSuccess = pyResult.match === true;
           isLive = pyResult.liveness !== false;
-          matchSuccess = pyResult.match !== false;
         }
+      } else {
+        matchSuccess = false;
+        failureMsg = pyResult.error?.message || pyResult.message || `Face recognition service error (${pyResponse.status})`;
       }
-    } catch {
-      // Python HTTP service offline or timed out; safe fallback active
-      similarityScore = 0.945;
-      isLive = true;
-      matchSuccess = true;
+    } catch (fetchErr) {
+      console.warn('[FaceService] Python Face AI service communication error:', fetchErr.message);
+      matchSuccess = false;
+      failureMsg = 'Face AI biometrics microservice unavailable. Please ensure the AI face service is running on port 8000.';
     }
 
     if (!isLive) {
       await this.logVerification({
-        employeeId,
+        employeeId: actualEmpId,
         verificationType,
         status: STATUSES.FACE_LOG.FAILED,
         livenessVerified: false,
@@ -173,31 +300,33 @@ class FaceVerificationService {
       return {
         verified: false,
         status: 'FAILED',
+        similarityScore,
         message: 'Liveness verification failed. Please look directly at the camera and avoid glare.'
       };
     }
 
     if (!matchSuccess || similarityScore < 0.45) {
       await this.logVerification({
-        employeeId,
+        employeeId: actualEmpId,
         verificationType,
         status: STATUSES.FACE_LOG.FAILED,
-        livenessVerified: true,
+        livenessVerified: isLive,
         similarityScore,
-        failureReason: 'Face embedding similarity below threshold.',
+        failureReason: failureMsg,
         deviceInfo
       });
 
       return {
         verified: false,
         status: 'FAILED',
-        message: 'Face identity verification failed. Face does not match registered template.'
+        similarityScore,
+        message: failureMsg
       };
     }
 
-    // 3. Record Successful Verification Log
+    // 4. Record Successful Verification Log
     const logId = await this.logVerification({
-      employeeId,
+      employeeId: actualEmpId,
       verificationType,
       status: STATUSES.FACE_LOG.SUCCESS,
       livenessVerified: true,
@@ -219,15 +348,24 @@ class FaceVerificationService {
    * Log verification attempt in face_verification_logs
    */
   async logVerification({ employeeId, attendanceId = null, verificationType, status, livenessVerified = false, similarityScore = null, failureReason = null, deviceInfo = null }) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      console.warn('[FaceLog] Cannot log verification: employee not found for identifier:', employeeId);
+      return null;
+    }
+
+    const validTypes = ['CHECK_IN', 'CHECK_OUT', 'KIOSK'];
+    const validType = validTypes.includes(verificationType) ? verificationType : 'KIOSK';
+
     const sql = `
       INSERT INTO face_verification_logs 
         (employee_id, attendance_id, verification_type, status, liveness_verified, similarity_score, failure_reason, device_info, verified_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `;
     const result = await query(sql, [
-      employeeId,
+      employee.id,
       attendanceId,
-      verificationType,
+      validType,
       status,
       livenessVerified,
       similarityScore,
@@ -241,15 +379,22 @@ class FaceVerificationService {
    * Revoke Face Enrollment
    */
   async revokeEnrollment(employeeId, revokedByUserId = null) {
+    const employee = await this.resolveEmployee(employeeId);
+    if (!employee) {
+      const err = new Error(`Employee record not found for "${employeeId}".`);
+      err.statusCode = 404;
+      throw err;
+    }
+
     await query(
       'UPDATE face_enrollments SET enrollment_status = "REVOKED", updated_at = NOW() WHERE employee_id = ?',
-      [employeeId]
+      [employee.id]
     );
 
     await query(
       `INSERT INTO audit_logs (user_id, action, module, record_id, description)
        VALUES (?, 'FACE_REVOKED', 'Face', ?, 'Face enrollment revoked')`,
-      [revokedByUserId, String(employeeId)]
+      [revokedByUserId, String(employee.id)]
     );
 
     return { success: true, message: 'Face enrollment revoked.' };
