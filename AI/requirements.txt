@@ -1,0 +1,21 @@
+# Core Numerical & Image Processing
+numpy>=1.24.0
+opencv-python>=4.8.0
+pillow>=9.5.0
+scikit-image>=0.20.0
+scipy>=1.10.0
+
+# Face Detection, Embeddings & Recognition (InsightFace + ONNX)
+insightface>=0.7.3
+onnxruntime>=1.15.0
+onnx>=1.14.0
+
+# Face Mesh & Active Liveness Detection (MediaPipe)
+mediapipe>=0.10.0
+
+# PDF Document Ingestion Support
+pypdfium2>=4.18.0
+
+# Utilities & Networking
+tqdm>=4.65.0
+requests>=2.28.0
