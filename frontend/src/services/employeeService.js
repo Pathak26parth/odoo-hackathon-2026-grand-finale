@@ -116,6 +116,31 @@ export const employeeService = {
     return res;
   },
 
+  async uploadEmployeePhoto(id, imageOrBase64) {
+    if (imageOrBase64 instanceof File) {
+      const formData = new FormData();
+      formData.append('photo', imageOrBase64);
+      const res = await api.post(`/upload/employee-photo/${id}`, formData);
+      return res.data;
+    } else {
+      const res = await api.post(`/upload/employee-photo/${id}`, { image: imageOrBase64 });
+      return res.data;
+    }
+  },
+
+  async uploadImage(fileOrBase64, folder = 'peoplepay360/uploads') {
+    if (fileOrBase64 instanceof File) {
+      const formData = new FormData();
+      formData.append('image', fileOrBase64);
+      formData.append('folder', folder);
+      const res = await api.post('/upload/image', formData);
+      return res.data?.url || res.data;
+    } else {
+      const res = await api.post('/upload/image', { image: fileOrBase64, folder });
+      return res.data?.url || res.data;
+    }
+  },
+
   async getEmployeeContracts(id) {
     const res = await api.get(`/employees/${id}/contracts`);
     return res.data || [];
@@ -139,3 +164,4 @@ export const employeeService = {
 };
 
 export default employeeService;
+

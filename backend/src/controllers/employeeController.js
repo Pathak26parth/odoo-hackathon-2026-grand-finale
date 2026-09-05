@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { sendSuccess, sendCreated, sendError, maskAccountNumber } = require('../utils/response');
 const authService = require('../services/authService');
+const cloudinaryService = require('../services/cloudinaryService');
 
 /**
  * Employee Master Management Controller
@@ -118,10 +119,10 @@ class EmployeeController {
         LEFT JOIN face_enrollments fe ON e.id = fe.employee_id
         LEFT JOIN users u ON e.id = u.employee_id
         LEFT JOIN roles r ON u.role_id = r.id
-        WHERE e.id = ?
+        WHERE e.id = ? OR e.employee_code = ?
         LIMIT 1
       `;
-      const rows = await query(sql, [id]);
+      const rows = await query(sql, [id, id]);
 
       if (rows.length === 0) {
         return sendError(res, 'Employee record not found.', 404);
@@ -130,7 +131,7 @@ class EmployeeController {
       const employee = rows[0];
 
       // Fetch Bank Details (Masked)
-      const bankRows = await query('SELECT * FROM employee_bank_details WHERE employee_id = ? LIMIT 1', [id]);
+      const bankRows = await query('SELECT * FROM employee_bank_details WHERE employee_id = ? LIMIT 1', [employee.id]);
       if (bankRows.length > 0) {
         const b = bankRows[0];
         employee.bankDetails = {
@@ -148,10 +149,10 @@ class EmployeeController {
       }
 
       // Smart Button Metric Counts
-      const [contractCount] = await query('SELECT COUNT(*) AS count FROM contracts WHERE employee_id = ?', [id]);
-      const [attCount] = await query('SELECT COUNT(*) AS count FROM attendance WHERE employee_id = ?', [id]);
-      const [leaveCount] = await query('SELECT COUNT(*) AS count FROM time_off_requests WHERE employee_id = ?', [id]);
-      const [payslipCount] = await query('SELECT COUNT(*) AS count FROM payslips WHERE employee_id = ?', [id]);
+      const [contractCount] = await query('SELECT COUNT(*) AS count FROM contracts WHERE employee_id = ?', [employee.id]);
+      const [attCount] = await query('SELECT COUNT(*) AS count FROM attendance WHERE employee_id = ?', [employee.id]);
+      const [leaveCount] = await query('SELECT COUNT(*) AS count FROM time_off_requests WHERE employee_id = ?', [employee.id]);
+      const [payslipCount] = await query('SELECT COUNT(*) AS count FROM payslips WHERE employee_id = ?', [employee.id]);
 
       employee.metrics = {
         contractsCount: contractCount ? contractCount.count : 0,
@@ -210,7 +211,20 @@ class EmployeeController {
         initialContract
       } = req.body;
 
-      const photoToSave = profilePhotoUrl || avatar || null;
+      let photoToSave = profilePhotoUrl || avatar || null;
+
+      // Upload base64 image to Cloudinary if provided
+      if (photoToSave && cloudinaryService.isBase64Image(photoToSave)) {
+        try {
+          photoToSave = await cloudinaryService.uploadImage(
+            photoToSave,
+            'peoplepay360/employees',
+            `emp_new_${Date.now()}`
+          );
+        } catch (uploadErr) {
+          console.error('[Employee Create] Cloudinary upload warning:', uploadErr.message);
+        }
+      }
 
       // Security check: Only System Admin can assign elevated roles; HR Manager always creates EMPLOYEE role
       const effectiveRole = req.user.role === 'ADMIN' ? (roleName || 'EMPLOYEE') : 'EMPLOYEE';
@@ -269,11 +283,25 @@ class EmployeeController {
         bankDetails
       } = req.body;
 
-      const photoToUpdate = profilePhotoUrl !== undefined ? profilePhotoUrl : (avatar !== undefined ? avatar : null);
+      let photoToUpdate = profilePhotoUrl !== undefined ? profilePhotoUrl : (avatar !== undefined ? avatar : null);
 
-      const existing = await query('SELECT * FROM employees WHERE id = ?', [id]);
+      const existing = await query('SELECT * FROM employees WHERE id = ? OR employee_code = ?', [id, id]);
       if (existing.length === 0) {
         return sendError(res, 'Employee not found.', 404);
+      }
+      const actualEmpId = existing[0].id;
+
+      // Upload base64 image to Cloudinary if provided
+      if (photoToUpdate && cloudinaryService.isBase64Image(photoToUpdate)) {
+        try {
+          photoToUpdate = await cloudinaryService.uploadImage(
+            photoToUpdate,
+            'peoplepay360/employees',
+            `emp_${actualEmpId}_${Date.now()}`
+          );
+        } catch (uploadErr) {
+          console.error('[Employee Update] Cloudinary upload warning:', uploadErr.message);
+        }
       }
 
       const sql = `
@@ -307,7 +335,7 @@ class EmployeeController {
         joiningDate !== undefined ? joiningDate : null,
         status !== undefined ? status : null,
         photoToUpdate !== undefined ? photoToUpdate : null,
-        id
+        actualEmpId
       ]);
 
       // Update Bank Details if provided
@@ -324,7 +352,7 @@ class EmployeeController {
              account_type = VALUES(account_type),
              updated_at = NOW()`,
           [
-            id,
+            actualEmpId,
             bankDetails.accountHolderName || `${firstName || existing[0].first_name} ${lastName || existing[0].last_name}`,
             bankDetails.bankName || 'Bank',
             bankDetails.accountNumber.trim(),
@@ -335,14 +363,21 @@ class EmployeeController {
         );
       }
 
+      // Fetch fresh updated employee
+      const [updatedEmp] = await query('SELECT * FROM employees WHERE id = ?', [actualEmpId]);
+
       // Audit Log
       await query(
         `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
          VALUES (?, 'EMPLOYEE_UPDATED', 'Employees', ?, 'Updated employee profile', ?, ?)`,
-        [req.user.id, String(id), req.ip, req.headers['user-agent'] || '']
+        [req.user.id, String(actualEmpId), req.ip, req.headers['user-agent'] || '']
       );
 
-      return sendSuccess(res, 'Employee profile updated successfully');
+      return sendSuccess(res, 'Employee profile updated successfully', {
+        employee: updatedEmp || null,
+        profilePhotoUrl: photoToUpdate || (updatedEmp ? updatedEmp.profile_photo_url : null),
+        avatar: photoToUpdate || (updatedEmp ? updatedEmp.profile_photo_url : null)
+      });
     } catch (error) {
       next(error);
     }

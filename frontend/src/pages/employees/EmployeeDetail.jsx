@@ -76,13 +76,15 @@ export const EmployeeDetail = () => {
 
   const populateForm = (existing) => {
     setEmployee(existing);
+    const resolvedPhoto = existing.profilePhotoUrl || existing.profile_photo_url || existing.avatar || DEFAULT_PHOTO;
     setFormData({
       firstName: existing.firstName || existing.first_name || existing.name?.split(' ')[0] || '',
       lastName: existing.lastName || existing.last_name || existing.name?.split(' ').slice(1).join(' ') || '',
       employeeId: existing.employeeId || existing.employee_code || existing.id || '',
       email: existing.email || '',
       phone: existing.phone || '+1 (555) 000-0000',
-      avatar: existing.avatar || existing.profile_photo_url || DEFAULT_PHOTO,
+      avatar: resolvedPhoto,
+      profilePhotoUrl: resolvedPhoto,
       department: existing.department || existing.department_name || 'Engineering',
       manager: existing.manager || existing.manager_name || 'Ethan Williams',
       position: existing.position || existing.job_position || '',
@@ -140,11 +142,19 @@ export const EmployeeDetail = () => {
     setSubmitting(true);
     try {
       if (isCreate) {
-        await createEmployee(formData);
-        setToastMessage('Employee created successfully!');
+        const created = await createEmployee(formData);
+        const newUrl = created?.data?.profilePhotoUrl || created?.profilePhotoUrl;
+        if (newUrl) {
+          setFormData((prev) => ({ ...prev, avatar: newUrl, profilePhotoUrl: newUrl }));
+        }
+        setToastMessage('Employee created and photo saved to Cloudinary successfully!');
       } else {
-        await updateEmployee(id, formData);
-        setToastMessage('Employee details updated successfully!');
+        const updated = await updateEmployee(id, formData);
+        const newUrl = updated?.data?.profilePhotoUrl || updated?.profilePhotoUrl;
+        if (newUrl) {
+          setFormData((prev) => ({ ...prev, avatar: newUrl, profilePhotoUrl: newUrl }));
+        }
+        setToastMessage('Employee details and photo updated in Cloudinary successfully!');
       }
 
       setTimeout(() => {
@@ -197,8 +207,8 @@ export const EmployeeDetail = () => {
               disabled={submitting}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
             >
-              <Save className="w-3.5 h-3.5" />
-              {isCreate ? 'Save Employee' : 'Update Employee'}
+              <Save className={`w-3.5 h-3.5 ${submitting ? 'animate-spin' : ''}`} />
+              {submitting ? 'Uploading & Saving...' : isCreate ? 'Save Employee' : 'Update Employee'}
             </button>
           )}
 
