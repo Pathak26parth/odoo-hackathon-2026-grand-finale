@@ -75,11 +75,20 @@ export const createEmployee = async (data) => {
 
 export const updateEmployee = async (id, data) => {
   try {
-    const res = await employeeService.updateEmployee(id, data);
-    const refreshed = await fetchEmployeesAsync();
+    const updatedEmp = await employeeService.updateEmployee(id, data);
+    
+    // Immediately update local cache with normalized updated employee
+    const list = getEmployees();
+    const idx = list.findIndex((e) => String(e.id) === String(id) || e.employeeId === id);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updatedEmp };
+    } else {
+      list.push(updatedEmp);
+    }
+    saveEmployeesToStorage(list);
 
-    // Check if Cloudinary URL was returned
-    const returnedPhoto = res?.data?.profilePhotoUrl || res?.data?.avatar || res?.profilePhotoUrl || res?.avatar;
+    // Also trigger background fetch to stay in sync
+    fetchEmployeesAsync().catch(console.error);
 
     // Synchronize current logged-in user profile if this employee matches
     try {
@@ -91,13 +100,14 @@ export const updateEmployee = async (id, data) => {
           u.employeeId === id ||
           (data.email && u.email === data.email)
         ) {
-          if (returnedPhoto) {
-            u.avatar = returnedPhoto;
-          } else if (data.avatar && !data.avatar.startsWith('data:')) {
-            u.avatar = data.avatar;
+          if (updatedEmp.avatar) {
+            u.avatar = updatedEmp.avatar;
           }
-          if (data.firstName && data.lastName) {
-            u.name = `${data.firstName} ${data.lastName}`;
+          if (updatedEmp.name) {
+            u.name = updatedEmp.name;
+          }
+          if (updatedEmp.email) {
+            u.email = updatedEmp.email;
           }
           localStorage.setItem('peoplepay360_current_user', JSON.stringify(u));
         }
@@ -106,7 +116,7 @@ export const updateEmployee = async (id, data) => {
       console.warn('Could not sync current user local cache:', e);
     }
 
-    return res;
+    return updatedEmp;
   } catch (err) {
     console.error('Update employee failed on backend:', err.message);
     const list = getEmployees();

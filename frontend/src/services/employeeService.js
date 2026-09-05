@@ -94,21 +94,28 @@ export const employeeService = {
     const body = {
       firstName: payload.firstName,
       lastName: payload.lastName,
+      email: payload.email,
       phone: payload.phone,
+      position: payload.position || payload.jobPosition,
       jobPosition: payload.position || payload.jobPosition,
+      department: payload.department,
       departmentId: payload.departmentId ? Number(payload.departmentId) : undefined,
+      manager: payload.manager,
       managerId: payload.managerId ? Number(payload.managerId) : undefined,
+      schedule: payload.schedule,
       workingScheduleId: payload.workingScheduleId ? Number(payload.workingScheduleId) : undefined,
       gender: payload.gender,
       dateOfBirth: payload.dateOfBirth,
       joiningDate: payload.joiningDate,
       status: payload.status ? payload.status.toUpperCase() : undefined,
+      avatar: payload.avatar || payload.profilePhotoUrl,
       profilePhotoUrl: payload.avatar || payload.profilePhotoUrl,
       bankDetails: payload.bankDetails
     };
 
     const res = await api.put(`/employees/${id}`, body);
-    return res;
+    const empData = res?.data?.employee || res?.data || res;
+    return normalizeEmployee(empData);
   },
 
   async deleteEmployee(id) {
