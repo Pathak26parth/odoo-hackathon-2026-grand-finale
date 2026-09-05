@@ -222,6 +222,10 @@ class FaceVerificationService {
     let failureMsg = 'Face identity verification failed. Face does not match registered profile photo.';
 
     // 2. Validate input image payload
+    if (faceInput && typeof faceInput === 'object') {
+      faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || faceInput.url || null;
+    }
+
     if (!faceInput || typeof faceInput !== 'string' || (!faceInput.startsWith('data:image') && !faceInput.startsWith('http') && !faceInput.endsWith('.jpg') && !faceInput.endsWith('.png'))) {
       await this.logVerification({
         employeeId: actualEmpId,

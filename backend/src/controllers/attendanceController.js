@@ -62,19 +62,52 @@ class AttendanceController {
   async faceCheckIn(req, res, next) {
     try {
       const employeeId = req.body.employeeId || req.user.employeeId;
-      const { faceInput, deviceInfo = 'WebCam' } = req.body;
+      let { faceInput, deviceInfo = 'WebCam' } = req.body;
 
       if (!employeeId) {
         return sendError(res, 'Employee ID is required.', 400);
       }
 
-      // 1. Run 1:1 Face & Liveness Verification
-      const verification = await faceVerificationService.verifyFace({
-        employeeId,
-        verificationType: 'CHECK_IN',
-        faceInput,
-        deviceInfo
-      });
+      // Unpack object payloads if frame was sent as { dataUrl: ... }
+      if (faceInput && typeof faceInput === 'object') {
+        faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || null;
+      }
+
+      const employee = await faceVerificationService.resolveEmployee(employeeId);
+      if (!employee) {
+        return sendError(res, `Employee record not found for "${employeeId}".`, 404);
+      }
+
+      let verification = null;
+
+      // If already verified during the kiosk scan step in the last 3 minutes
+      if (!faceInput || faceInput === 'live_camera_punch_frame') {
+        const recentSuccessLogs = await query(
+          `SELECT id, similarity_score, verified_at 
+           FROM face_verification_logs 
+           WHERE employee_id = ? AND status = 'SUCCESS' AND verified_at >= NOW() - INTERVAL 3 MINUTE 
+           ORDER BY id DESC LIMIT 1`,
+          [employee.id]
+        );
+        if (recentSuccessLogs.length > 0) {
+          verification = {
+            verified: true,
+            status: 'SUCCESS',
+            similarityScore: parseFloat(recentSuccessLogs[0].similarity_score) || 0.95,
+            logId: recentSuccessLogs[0].id
+          };
+        }
+      }
+
+      // Run 1:1 Face Verification if not already validated
+      if (!verification) {
+        verification = await faceVerificationService.verifyFace({
+          employeeId: employee.id,
+          verificationType: 'CHECK_IN',
+          faceInput,
+          deviceInfo
+        });
+      }
 
       if (!verification.verified) {
         return sendError(res, verification.message, 400, { verificationStatus: verification.status });
@@ -82,7 +115,7 @@ class AttendanceController {
 
       // 2. Record Check-In in Attendance
       const attResult = await attendanceService.checkIn({
-        employeeId,
+        employeeId: employee.id,
         verificationMethod: 'FACE',
         checkInTime: new Date()
       });
@@ -113,19 +146,52 @@ class AttendanceController {
   async faceCheckOut(req, res, next) {
     try {
       const employeeId = req.body.employeeId || req.user.employeeId;
-      const { faceInput, deviceInfo = 'WebCam' } = req.body;
+      let { faceInput, deviceInfo = 'WebCam' } = req.body;
 
       if (!employeeId) {
         return sendError(res, 'Employee ID is required.', 400);
       }
 
-      // 1. Run 1:1 Face & Liveness Verification
-      const verification = await faceVerificationService.verifyFace({
-        employeeId,
-        verificationType: 'CHECK_OUT',
-        faceInput,
-        deviceInfo
-      });
+      // Unpack object payloads if frame was sent as { dataUrl: ... }
+      if (faceInput && typeof faceInput === 'object') {
+        faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || null;
+      }
+
+      const employee = await faceVerificationService.resolveEmployee(employeeId);
+      if (!employee) {
+        return sendError(res, `Employee record not found for "${employeeId}".`, 404);
+      }
+
+      let verification = null;
+
+      // If already verified during the kiosk scan step in the last 3 minutes
+      if (!faceInput || faceInput === 'live_camera_punch_frame') {
+        const recentSuccessLogs = await query(
+          `SELECT id, similarity_score, verified_at 
+           FROM face_verification_logs 
+           WHERE employee_id = ? AND status = 'SUCCESS' AND verified_at >= NOW() - INTERVAL 3 MINUTE 
+           ORDER BY id DESC LIMIT 1`,
+          [employee.id]
+        );
+        if (recentSuccessLogs.length > 0) {
+          verification = {
+            verified: true,
+            status: 'SUCCESS',
+            similarityScore: parseFloat(recentSuccessLogs[0].similarity_score) || 0.95,
+            logId: recentSuccessLogs[0].id
+          };
+        }
+      }
+
+      // Run 1:1 Face Verification if not already validated
+      if (!verification) {
+        verification = await faceVerificationService.verifyFace({
+          employeeId: employee.id,
+          verificationType: 'CHECK_OUT',
+          faceInput,
+          deviceInfo
+        });
+      }
 
       if (!verification.verified) {
         return sendError(res, verification.message, 400, { verificationStatus: verification.status });
@@ -133,7 +199,7 @@ class AttendanceController {
 
       // 2. Record Check-Out in Attendance
       const attResult = await attendanceService.checkOut({
-        employeeId,
+        employeeId: employee.id,
         verificationMethod: 'FACE',
         checkOutTime: new Date()
       });
