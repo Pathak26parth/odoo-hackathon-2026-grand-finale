@@ -47,6 +47,9 @@ import { PayslipDetail } from './pages/payroll/PayslipDetail';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Reports } from './pages/reports/Reports';
 
+// Home Landing Page
+import { Home } from './pages/home/Home';
+
 // App Layout with Sidebar & Header
 const AppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -351,6 +354,10 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public Landing & Home Routes */}
+          <Route path="/" element={<Home />} />
+          <Route path="/home" element={<Home />} />
+
           {/* Public Login Route */}
           <Route path="/login" element={<Login />} />
 
@@ -362,7 +369,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<IndexRedirect />} />
+            <Route path="/console" element={<IndexRedirect />} />
 
             {/* MODULE 23: Payroll Dashboard */}
             <Route path="/dashboard" element={<Dashboard />} />

@@ -41,13 +41,19 @@ class EmployeeController {
           ws.name AS schedule_name,
           fe.enrollment_status AS face_enrollment_status,
           c.wage AS current_wage,
-          c.id AS active_contract_id
+          c.id AS active_contract_id,
+          u.id AS user_id,
+          r.name AS user_role,
+          r.name AS role,
+          r.display_name AS user_role_display
         FROM employees e
         LEFT JOIN departments d ON e.department_id = d.id
         LEFT JOIN employees m ON e.manager_id = m.id
         LEFT JOIN working_schedules ws ON e.working_schedule_id = ws.id
         LEFT JOIN face_enrollments fe ON e.id = fe.employee_id
         LEFT JOIN contracts c ON e.id = c.employee_id AND c.status = 'ACTIVE'
+        LEFT JOIN users u ON e.id = u.employee_id
+        LEFT JOIN roles r ON u.role_id = r.id
         WHERE 1=1
       `;
       const params = [];
@@ -207,7 +213,11 @@ class EmployeeController {
         joiningDate,
         profilePhotoUrl,
         avatar,
-        roleName = 'EMPLOYEE',
+        role,
+        roleName,
+        role_name,
+        roleId,
+        role_id,
         bankDetails,
         initialContract
       } = req.body;
@@ -227,8 +237,9 @@ class EmployeeController {
         }
       }
 
-      // Security check: Only System Admin can assign elevated roles; HR Manager always creates EMPLOYEE role
-      const effectiveRole = req.user.role === 'ADMIN' ? (roleName || 'EMPLOYEE') : 'EMPLOYEE';
+      // Resolve effective role for user account creation
+      const chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      const effectiveRole = chosenRole || 'EMPLOYEE';
 
       const result = await authService.createEmployeeWithAccount({
         employeeData: {
@@ -295,6 +306,11 @@ class EmployeeController {
         profilePhotoUrl,
         profile_photo_url,
         avatar,
+        role,
+        roleName,
+        role_name,
+        roleId,
+        role_id,
         bankDetails
       } = req.body;
 
@@ -338,7 +354,7 @@ class EmployeeController {
       } else if (department) {
         const deptStr = String(department).trim().toLowerCase();
         const depts = await query('SELECT id, name, code FROM departments');
-        const matched = depts.find(d => 
+        const matched = depts.find(d =>
           d.name.toLowerCase() === deptStr ||
           deptStr.includes(d.name.toLowerCase()) ||
           d.name.toLowerCase().includes(deptStr) ||
@@ -386,7 +402,7 @@ class EmployeeController {
       } else if (schedule) {
         const schedStr = String(schedule).trim().toLowerCase();
         const scheds = await query('SELECT id, name, type FROM working_schedules');
-        const matched = scheds.find(s => 
+        const matched = scheds.find(s =>
           s.name.toLowerCase() === schedStr ||
           schedStr.includes(s.name.toLowerCase()) ||
           s.name.toLowerCase().includes(schedStr)
@@ -434,29 +450,52 @@ class EmployeeController {
 
       const emailChanged = targetEmail && targetEmail !== existing[0].email;
 
-      // Update linked user account if exists or create if missing
-      if (targetEmail) {
-        const linkedUsers = await query('SELECT id FROM users WHERE employee_id = ?', [actualEmpId]);
-        if (linkedUsers.length > 0) {
-          await query('UPDATE users SET email = ?, updated_at = NOW() WHERE employee_id = ?', [targetEmail, actualEmpId]);
-        } else {
-          try {
-            const roleId = await authService.resolveRoleId('EMPLOYEE');
-            const tempPassword = authService.generateSecurePassword(12);
-            const passwordHash = await authService.hashPassword(tempPassword);
-            await query(
-              `INSERT INTO users (email, password_hash, role_id, employee_id, is_active, is_verified, must_change_password)
-               VALUES (?, ?, ?, ?, TRUE, FALSE, TRUE)`,
-              [targetEmail, passwordHash, roleId, actualEmpId]
-            );
-          } catch (uErr) {
-            console.warn('[Employee Update] User account creation warning:', uErr.message);
+      // Update linked user account role, email, and active status
+      const targetRole = role !== undefined ? role : (roleName !== undefined ? roleName : (role_name !== undefined ? role_name : (roleId !== undefined ? roleId : (role_id !== undefined ? role_id : null))));
+      let resolvedRoleId = null;
+      if (targetRole) {
+        resolvedRoleId = await authService.resolveRoleId(targetRole);
+      }
+
+      const userEmail = targetEmail || existing[0].email;
+      const linkedUsers = await query('SELECT id, role_id, email FROM users WHERE employee_id = ? OR email = ?', [actualEmpId, existing[0].email]);
+
+      if (linkedUsers.length > 0) {
+        for (const u of linkedUsers) {
+          const updates = ['updated_at = NOW()'];
+          const updateParams = [];
+
+          if (targetEmail) {
+            updates.push('email = ?');
+            updateParams.push(targetEmail);
+          }
+          if (resolvedRoleId) {
+            updates.push('role_id = ?');
+            updateParams.push(resolvedRoleId);
+          }
+          if (targetStatus) {
+            updates.push('is_active = ?');
+            updateParams.push(targetStatus === 'ACTIVE');
+          }
+
+          if (updateParams.length > 0) {
+            updateParams.push(u.id);
+            await query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, updateParams);
           }
         }
-      }
-      if (targetStatus) {
-        const isActive = targetStatus === 'ACTIVE';
-        await query('UPDATE users SET is_active = ?, updated_at = NOW() WHERE employee_id = ?', [isActive, actualEmpId]);
+      } else if (userEmail) {
+        try {
+          const roleToUse = resolvedRoleId || await authService.resolveRoleId('EMPLOYEE');
+          const tempPassword = authService.generateSecurePassword(12);
+          const passwordHash = await authService.hashPassword(tempPassword);
+          await query(
+            `INSERT INTO users (email, password_hash, role_id, employee_id, is_active, is_verified, must_change_password)
+             VALUES (?, ?, ?, ?, TRUE, FALSE, TRUE)`,
+            [userEmail, passwordHash, roleToUse, actualEmpId]
+          );
+        } catch (uErr) {
+          console.warn('[Employee Update] User account creation warning:', uErr.message);
+        }
       }
 
       // Update Bank Details if provided

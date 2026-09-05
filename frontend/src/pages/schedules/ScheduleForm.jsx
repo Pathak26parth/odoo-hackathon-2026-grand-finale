@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Clock, Calendar, Check, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, Clock, Calendar, Check, AlertCircle, Zap, Copy, CheckCheck } from 'lucide-react';
 import {
   getScheduleById,
+  getScheduleByIdAsync,
   createSchedule,
   updateSchedule,
   calculateDailyHours,
@@ -19,6 +20,12 @@ export const ScheduleForm = () => {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Quick Bulk Schedule Setup State
+  const [bulkStartTime, setBulkStartTime] = useState('09:00');
+  const [bulkEndTime, setBulkEndTime] = useState('18:00');
+  const [bulkBreak, setBulkBreak] = useState(1);
+  const [bulkAppliedMsg, setBulkAppliedMsg] = useState('');
+
   const [formData, setFormData] = useState({
     name: '',
     type: 'Full-time',
@@ -27,20 +34,32 @@ export const ScheduleForm = () => {
   });
 
   useEffect(() => {
+    let isMounted = true;
     if (!isCreate) {
-      const existing = getScheduleById(id);
-      if (existing) {
-        setFormData({
-          name: existing.name || '',
-          type: existing.type || 'Full-time',
-          status: existing.status || 'Active',
-          days: existing.days || DEFAULT_WEEK_DAYS
+      getScheduleByIdAsync(id)
+        .then((existing) => {
+          if (!isMounted) return;
+          if (existing) {
+            setFormData({
+              name: existing.name || '',
+              type: existing.type || 'Full-time',
+              status: existing.status || 'Active',
+              days: existing.days || DEFAULT_WEEK_DAYS
+            });
+          } else {
+            alert('Schedule not found');
+            navigate('/working-schedules');
+          }
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          alert('Error loading schedule details');
+          navigate('/working-schedules');
         });
-      } else {
-        alert('Schedule not found');
-        navigate('/working-schedules');
-      }
     }
+    return () => {
+      isMounted = false;
+    };
   }, [id, isCreate, navigate]);
 
   // Handle updates to individual days in the weekly schedule grid
@@ -62,6 +81,85 @@ export const ScheduleForm = () => {
     });
   };
 
+  // Apply bulk timings across the weekly schedule in one click (Mon to Fri or Mon to Sat)
+  const handleApplyBulkSchedule = (scope = 'mon-fri') => {
+    setFormData((prev) => {
+      const updatedDays = prev.days.map((dayRow, idx) => {
+        // scope === 'mon-fri': Mon-Fri (idx 0 to 4) working=true, Sat & Sun (idx 5 & 6) working=false
+        // scope === 'mon-sat': Mon-Sat (idx 0 to 5) working=true, Sun (idx 6) working=false
+        const isWorkDay = scope === 'mon-sat' ? idx < 6 : idx < 5;
+
+        if (!isWorkDay) {
+          return {
+            ...dayRow,
+            working: false,
+            dailyHours: 0
+          };
+        }
+
+        const updated = {
+          ...dayRow,
+          working: true,
+          startTime: bulkStartTime,
+          endTime: bulkEndTime,
+          breakDuration: Number(bulkBreak) || 0
+        };
+
+        updated.dailyHours = calculateDailyHours(
+          updated.startTime,
+          updated.endTime,
+          updated.breakDuration,
+          true
+        );
+
+        return updated;
+      });
+
+      return { ...prev, days: updatedDays };
+    });
+
+    const targetLabel =
+      scope === 'mon-sat'
+        ? 'Monday to Saturday (6 days, Sunday Off)'
+        : 'Monday to Friday (5 days, Weekend Off)';
+
+    setBulkAppliedMsg(`Applied ${bulkStartTime} – ${bulkEndTime} (${bulkBreak}h break) to ${targetLabel}!`);
+    setTimeout(() => setBulkAppliedMsg(''), 3500);
+  };
+
+  // Quick helper to copy Monday's hours to all working days
+  const handleCopyMondayToAll = () => {
+    const monday = formData.days[0];
+    if (!monday) return;
+
+    setBulkStartTime(monday.startTime);
+    setBulkEndTime(monday.endTime);
+    setBulkBreak(monday.breakDuration);
+
+    setFormData((prev) => {
+      const updatedDays = prev.days.map((dayRow, idx) => {
+        if (idx === 0 || !dayRow.working) return dayRow;
+        const updated = {
+          ...dayRow,
+          startTime: monday.startTime,
+          endTime: monday.endTime,
+          breakDuration: monday.breakDuration
+        };
+        updated.dailyHours = calculateDailyHours(
+          updated.startTime,
+          updated.endTime,
+          updated.breakDuration,
+          dayRow.working
+        );
+        return updated;
+      });
+      return { ...prev, days: updatedDays };
+    });
+
+    setBulkAppliedMsg(`Copied Monday's schedule to all working days!`);
+    setTimeout(() => setBulkAppliedMsg(''), 3500);
+  };
+
   // Dynamic calculation of total weekly hours
   const totalWeeklyHours = formData.days.reduce(
     (acc, d) => acc + (d.working ? Number(d.dailyHours || 0) : 0),
@@ -76,25 +174,27 @@ export const ScheduleForm = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setSubmitting(true);
     try {
       if (isCreate) {
-        createSchedule(formData);
-        setToastMessage('Schedule created successfully!');
+        await createSchedule(formData);
+        setToastMessage('Schedule created successfully! Notification emails dispatched to matching employees.');
       } else {
-        updateSchedule(id, formData);
-        setToastMessage('Schedule updated successfully!');
+        await updateSchedule(id, formData);
+        setToastMessage('Schedule updated successfully! Notification emails dispatched to matching employees.');
       }
 
       setTimeout(() => {
         navigate('/working-schedules');
-      }, 900);
+      }, 1200);
     } catch (err) {
-      alert('Error saving schedule: ' + err.message);
+      console.error('Save schedule error:', err);
+      const errMsg = err.response?.data?.message || err.message || 'Unknown error occurred while saving schedule';
+      alert('Error saving schedule: ' + errMsg);
       setSubmitting(false);
     }
   };
@@ -200,6 +300,106 @@ export const ScheduleForm = () => {
             <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-800">
               <Clock className="w-4 h-4 text-blue-600" />
               <span>Total Weekly Hours: {Math.round(totalWeeklyHours * 10) / 10} hrs</span>
+            </div>
+          </div>
+
+          {/* Quick Bulk Action Banner: Set starting, ending, and break duration at once for all days */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50/90 to-indigo-50/50 border border-blue-200/80 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">
+                    Quick Uniform Schedule Setter
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Configure shift starting time, ending time, and break duration at once for all days
+                  </p>
+                </div>
+              </div>
+
+              {bulkAppliedMsg && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-semibold border border-emerald-300 animate-in fade-in">
+                  <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{bulkAppliedMsg}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Start Time
+                </label>
+                <input
+                  type="time"
+                  value={bulkStartTime}
+                  onChange={(e) => setBulkStartTime(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  End Time
+                </label>
+                <input
+                  type="time"
+                  value={bulkEndTime}
+                  onChange={(e) => setBulkEndTime(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Break Duration (Hrs)
+                </label>
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  max="5"
+                  value={bulkBreak}
+                  onChange={(e) => setBulkBreak(Number(e.target.value))}
+                  className="w-24 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
+                <button
+                  type="button"
+                  onClick={() => handleApplyBulkSchedule('mon-fri')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                  title="Apply these hours to Mon through Fri (Weekend Sat & Sun Off)"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>Mon to Fri (5 Days)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleApplyBulkSchedule('mon-sat')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                  title="Apply these hours to Mon through Sat (Sunday Off)"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>Mon to Sat (6 Days)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyMondayToAll}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                  title="Copy Monday's current hours to all working days"
+                >
+                  <Copy className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Copy Monday to All</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -328,7 +528,7 @@ export const ScheduleForm = () => {
             className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
-            {isCreate ? 'Save Schedule' : 'Update Schedule'}
+            {submitting ? 'Saving & Notifying...' : (isCreate ? 'Save Schedule' : 'Update Schedule')}
           </button>
         </div>
       </form>

@@ -3,7 +3,11 @@
  * Configured with environment base URL, automated JWT headers, and error formatting.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1'
+    ? 'http://127.0.0.1:5000/api'
+    : 'http://localhost:5000/api');
 
 const TOKEN_KEY = 'peoplepay360_access_token';
 const REFRESH_TOKEN_KEY = 'peoplepay360_refresh_token';

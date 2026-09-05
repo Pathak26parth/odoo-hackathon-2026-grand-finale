@@ -28,7 +28,7 @@ export const getSchedules = () => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((s) => s && (s.assignedEmployees !== 1 || s.type !== 'Full-time'));
+        return parsed;
       }
     }
   } catch (err) {
@@ -63,34 +63,56 @@ export const getScheduleById = (id) => {
   return list.find((s) => String(s.id) === String(id)) || null;
 };
 
-export const createSchedule = async (data) => {
+export const getScheduleByIdAsync = async (id) => {
   try {
-    const res = await scheduleService.createSchedule(data);
+    const s = await scheduleService.getScheduleById(id);
+    if (s) return s;
+  } catch (err) {
+    console.warn('Could not fetch schedule by ID from backend:', err.message);
+  }
+  return getScheduleById(id);
+};
+
+function prepareSchedulePayload(data) {
+  return {
+    name: data.name,
+    type: data.type || 'Full-time',
+    status: data.status || 'Active',
+    isActive: data.status === 'Active' || data.isActive === true,
+    days: (data.days || []).map((d) => ({
+      dayOfWeek: d.day || d.dayOfWeek,
+      day: d.day || d.dayOfWeek,
+      working: d.working !== false,
+      startTime: d.startTime || '09:00',
+      endTime: d.endTime || '18:00',
+      breakMinutes: d.breakMinutes !== undefined ? d.breakMinutes : Math.round((Number(d.breakDuration) || 0) * 60),
+      breakDuration: Number(d.breakDuration) || 0,
+      dailyHours: Number(d.dailyHours) || 0
+    }))
+  };
+}
+
+export const createSchedule = async (data) => {
+  const payload = prepareSchedulePayload(data);
+  try {
+    const res = await scheduleService.createSchedule(payload);
     await fetchSchedulesAsync();
     return res;
   } catch (err) {
     console.error('Create schedule failed on backend:', err.message);
-    const list = getSchedules();
-    const newSch = { id: String(Date.now()), ...data };
-    saveSchedulesToStorage([newSch, ...list]);
-    return newSch;
+    throw err;
   }
 };
 
 export const updateSchedule = async (id, data) => {
+  const payload = prepareSchedulePayload(data);
   try {
-    const res = await scheduleService.updateSchedule(id, data);
+    const res = await scheduleService.updateSchedule(id, payload);
     await fetchSchedulesAsync();
     return res;
   } catch (err) {
     console.error('Update schedule failed on backend:', err.message);
-    const list = getSchedules();
-    const idx = list.findIndex((s) => String(s.id) === String(id));
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], ...data };
-      saveSchedulesToStorage(list);
-    }
-    return data;
+    throw err;
   }
 };
 
@@ -101,8 +123,6 @@ export const deleteSchedule = async (id) => {
     return res;
   } catch (err) {
     console.error('Delete schedule failed on backend:', err.message);
-    const list = getSchedules().filter((s) => String(s.id) !== String(id));
-    saveSchedulesToStorage(list);
-    return true;
+    throw err;
   }
 };

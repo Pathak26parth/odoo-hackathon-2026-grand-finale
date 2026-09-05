@@ -134,6 +134,25 @@ export const Employees = () => {
       )
     },
     {
+      header: 'System Role',
+      key: 'role',
+      render: (row) => {
+        const r = (row.role || row.userRole || row.user_role || 'EMPLOYEE').toUpperCase();
+        switch (r) {
+          case 'ADMIN':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
+          case 'HR_MANAGER':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">HR Manager</span>;
+          case 'HR_PAYROLL_ADMIN':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">Payroll Admin</span>;
+          case 'HR_PAYROLL_USER':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">Payroll User</span>;
+          default:
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">Employee</span>;
+        }
+      }
+    },
+    {
       header: 'Manager',
       key: 'manager',
       render: (row) => row.manager || row.managerName || 'None',
@@ -321,7 +340,25 @@ export const Employees = () => {
                   <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm truncate">
                     {name}
                   </h3>
-                  <p className="text-slate-600 font-medium truncate mt-0.5">{position}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-slate-600 font-medium truncate">{position}</span>
+                    <span className="text-slate-300">•</span>
+                    {(() => {
+                      const r = (emp.role || emp.userRole || emp.user_role || 'EMPLOYEE').toUpperCase();
+                      switch (r) {
+                        case 'ADMIN':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
+                        case 'HR_MANAGER':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">HR Manager</span>;
+                        case 'HR_PAYROLL_ADMIN':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200">Payroll Admin</span>;
+                        case 'HR_PAYROLL_USER':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">Payroll User</span>;
+                        default:
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 border border-slate-200">Employee</span>;
+                      }
+                    })()}
+                  </div>
 
                   <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-slate-500 text-[11px]">
                     <p className="flex items-center gap-1.5">

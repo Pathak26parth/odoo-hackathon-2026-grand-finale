@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, AlertCircle } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const Login = () => {
@@ -37,6 +37,18 @@ export const Login = () => {
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8">
       {/* Login Container */}
       <div className="w-full max-w-md">
+        {/* Back to Home Link */}
+        <div className="mb-4 flex items-center justify-between">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Home</span>
+          </Link>
+          <span className="text-[11px] font-mono text-slate-400">Odoo Hackathon 2026</span>
+        </div>
+
         {/* Top Branding */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-xl shadow-xs mb-3">
