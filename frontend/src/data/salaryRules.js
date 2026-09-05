@@ -104,7 +104,7 @@ export const saveSalaryRulesToStorage = (list) => {
 export const fetchSalaryRulesAsync = async () => {
   try {
     const rules = await payrollService.getSalaryRules();
-    if (rules && rules.length > 0) {
+    if (Array.isArray(rules)) {
       saveSalaryRulesToStorage(rules);
       return rules;
     }

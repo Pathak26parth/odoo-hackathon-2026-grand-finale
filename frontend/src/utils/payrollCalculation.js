@@ -33,16 +33,17 @@ export const calculatePayslip = (
     });
   }
 
-  // Check mock bank details (e.g., if employee email is missing or flagged, or if employee id is emp-4 James Anderson simulate missing bank details)
-  if (!employee.bankAccount && employee.id === 'emp-4') {
+  // Check bank disbursement details
+  const hasBank = employee.bankAccount || employee.bankAccountNumber || employee.bank_account_number;
+  if (!hasBank) {
     warnings.push({
       type: 'Missing Bank Details',
-      message: `${employee.name} has missing bank disbursement information.`
+      message: `${employee.name || 'Employee'} has missing bank disbursement information.`
     });
   }
 
-  // Base wage from contract or default 50000
-  const contractWage = contract ? Number(contract.wage) || 50000 : 50000;
+  // Base wage from contract
+  const contractWage = contract ? (Number(contract.wage) || 0) : 0;
 
   // Filter and sort rules by sequence
   // If structure specifies ruleIds, filter them; otherwise use all active rules

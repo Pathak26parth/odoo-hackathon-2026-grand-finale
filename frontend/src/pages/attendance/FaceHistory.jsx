@@ -1,6 +1,6 @@
 // pages/attendance/FaceHistory.jsx
-import React, { useState } from 'react';
-import { getFaceHistory } from '../../data/faceAttendance';
+import React, { useState, useEffect } from 'react';
+import { getFaceHistory, fetchFaceHistoryAsync } from '../../data/faceAttendance';
 import { FaceHistoryTable } from '../../components/faceRecognition/FaceHistoryTable';
 import { FACE_ATTENDANCE_PRIVACY_NOTICE } from '../../services/faceRecognitionService';
 import { History, Search, Filter, ShieldCheck } from 'lucide-react';
@@ -9,6 +9,12 @@ export const FaceHistory = () => {
   const [historyRecords, setHistoryRecords] = useState(getFaceHistory());
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
+
+  useEffect(() => {
+    fetchFaceHistoryAsync().then((list) => {
+      if (Array.isArray(list)) setHistoryRecords(list);
+    }).catch(console.error);
+  }, []);
 
   const filtered = historyRecords.filter((r) => {
     const matchesSearch =

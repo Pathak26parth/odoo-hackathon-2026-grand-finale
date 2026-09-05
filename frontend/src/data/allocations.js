@@ -33,7 +33,7 @@ export const saveAllocationsToStorage = (list) => {
 export const fetchAllocationsAsync = async (params = {}) => {
   try {
     const allocations = await timeOffService.getAllocations(params);
-    if (allocations && allocations.length > 0) {
+    if (Array.isArray(allocations)) {
       saveAllocationsToStorage(allocations);
       return allocations;
     }

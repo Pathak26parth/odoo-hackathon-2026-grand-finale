@@ -71,8 +71,15 @@ export const AuthProvider = ({ children }) => {
 
     restoreSession();
 
-    const handleUnauthorized = () => {
-      logout();
+    let isHandlingUnauthorized = false;
+    const handleUnauthorized = async () => {
+      if (isHandlingUnauthorized) return;
+      isHandlingUnauthorized = true;
+      try {
+        await logout();
+      } finally {
+        isHandlingUnauthorized = false;
+      }
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);

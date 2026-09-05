@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { createAllocation } from '../../data/allocations';
-import { getTimeOffTypes } from '../../data/timeOffTypes';
-import { getEmployees } from '../../data/employees';
+import { getTimeOffTypes, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { AllocationForm } from '../../components/timeOff/AllocationForm';
 
@@ -16,6 +16,14 @@ export const TimeOffAllocationNew = () => {
   useEffect(() => {
     setEmployees(getEmployees());
     setTypes(getTimeOffTypes().filter((t) => t.status === 'Active'));
+
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+
+    fetchTimeOffTypesAsync().then((list) => {
+      if (Array.isArray(list)) setTypes(list.filter((t) => t.status === 'Active'));
+    }).catch(console.error);
   }, []);
 
   const handleSubmit = (data) => {

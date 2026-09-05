@@ -28,7 +28,7 @@ export const savePayrunsToStorage = (list) => {
 export const fetchPayrunsAsync = async () => {
   try {
     const payruns = await payrollService.getPayruns();
-    if (payruns && payruns.length > 0) {
+    if (Array.isArray(payruns)) {
       savePayrunsToStorage(payruns);
       return payruns;
     }

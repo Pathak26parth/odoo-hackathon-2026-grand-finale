@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Layers, Check, ShieldAlert } from 'lucide-react';
-import { getSalaryStructures, deleteSalaryStructure } from '../../data/salaryStructures';
+import { getSalaryStructures, deleteSalaryStructure, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -34,6 +34,9 @@ export const SalaryStructures = () => {
 
   useEffect(() => {
     loadData();
+    fetchSalaryStructuresAsync().then((list) => {
+      if (Array.isArray(list)) setStructures(list);
+    }).catch(console.error);
   }, []);
 
   if (!hasAccess) {

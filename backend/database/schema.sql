@@ -180,7 +180,7 @@ CREATE TABLE `employees` (
   `date_of_birth` DATE NULL,
   `joining_date` DATE NOT NULL DEFAULT (CURRENT_DATE),
   `status` ENUM('ACTIVE', 'INACTIVE', 'ON_LEAVE', 'TERMINATED') DEFAULT 'ACTIVE',
-  `profile_photo_url` VARCHAR(500) NULL,
+  `profile_photo_url` MEDIUMTEXT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON DELETE SET NULL,

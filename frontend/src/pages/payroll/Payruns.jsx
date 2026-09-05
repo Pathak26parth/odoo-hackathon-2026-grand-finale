@@ -28,11 +28,11 @@ export const Payruns = () => {
     setStructures(getSalaryStructures());
 
     fetchPayrunsAsync().then((list) => {
-      if (list && list.length > 0) setPayruns(list);
+      if (Array.isArray(list)) setPayruns(list);
     }).catch(console.error);
 
     fetchSalaryStructuresAsync().then((list) => {
-      if (list && list.length > 0) setStructures(list);
+      if (Array.isArray(list)) setStructures(list);
     }).catch(console.error);
   }, []);
 

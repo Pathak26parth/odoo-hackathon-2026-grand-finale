@@ -22,11 +22,11 @@ export const TimeOffRequestNew = () => {
     setTypes(getTimeOffTypes().filter((t) => t.status === 'Active'));
 
     fetchEmployeesAsync().then((list) => {
-      if (list && list.length > 0) setEmployees(list);
+      if (Array.isArray(list) && list.length > 0) setEmployees(list);
     }).catch(console.error);
 
     fetchTimeOffTypesAsync().then((list) => {
-      if (list && list.length > 0) setTypes(list.filter((t) => t.status === 'Active'));
+      if (Array.isArray(list) && list.length > 0) setTypes(list.filter((t) => t.status === 'Active'));
     }).catch(console.error);
   }, []);
 

@@ -151,7 +151,7 @@ export const PayrunWizard = () => {
     const initialPayslips = selectedEmployees.map((empId, index) => {
       const emp = employees.find((e) => e.id === empId);
       const evalItem = evaluatedEmployees.find((item) => item.employee.id === empId);
-      const wage = evalItem?.contract?.wage || 50000;
+      const wage = Number(evalItem?.contract?.wage) || 0;
 
       return {
         id: `slip-${created.id}-${index + 1}`,
@@ -163,7 +163,7 @@ export const PayrunWizard = () => {
         employeeName: emp.name,
         department: emp.department,
         position: emp.position,
-        contractId: evalItem?.contract?.id || 'CTR-001',
+        contractId: evalItem?.contract?.id || null,
         salaryStructureId: created.salaryStructureId,
         salaryStructureName: created.salaryStructureName,
         periodStart: created.periodStart,

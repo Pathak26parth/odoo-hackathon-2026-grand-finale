@@ -346,11 +346,11 @@ class AuthService {
         `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
          VALUES (?, 'EMPLOYEE_CREATED', 'Employees', ?, ?, ?, ?)`,
         [
-          createdByUserId,
+          createdByUserId || null,
           String(employeeId),
           `Created employee profile ${empCode} with user account`,
-          userIp,
-          userAgent
+          userIp || null,
+          userAgent || null
         ]
       );
 

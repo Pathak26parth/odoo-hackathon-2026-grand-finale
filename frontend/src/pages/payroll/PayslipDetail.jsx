@@ -109,7 +109,7 @@ export const PayslipDetail = () => {
             Employee Information
           </h3>
           <span className="text-xs font-semibold text-slate-700">
-            Worked Days: <strong className="text-blue-600">{payslip.workedDays || 22} Days</strong>
+            Worked Days: <strong className="text-blue-600">{payslip.workedDays !== undefined && payslip.workedDays !== null ? payslip.workedDays : '-'} Days</strong>
           </span>
         </div>
 

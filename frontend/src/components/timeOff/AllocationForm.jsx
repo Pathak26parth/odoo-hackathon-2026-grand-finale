@@ -9,14 +9,14 @@ export const AllocationForm = ({
   onCancel
 }) => {
   const [formData, setFormData] = useState({
-    employeeId: employees[0]?.id || 'emp-1',
-    employeeName: employees[0]?.name || 'Amelia Johnson',
-    timeOffTypeId: timeOffTypes[0]?.id || 'tot-1',
-    timeOffTypeName: timeOffTypes[0]?.name || 'Annual Leave',
+    employeeId: employees[0]?.id || '',
+    employeeName: employees[0]?.name || '',
+    timeOffTypeId: timeOffTypes[0]?.id || '',
+    timeOffTypeName: timeOffTypes[0]?.name || '',
     unit: timeOffTypes[0]?.unit || 'Days',
     allocated: 20,
-    validFrom: '2026-01-01',
-    validUntil: '2026-12-31',
+    validFrom: `${new Date().getFullYear()}-01-01`,
+    validUntil: `${new Date().getFullYear()}-12-31`,
     status: 'Active'
   });
 

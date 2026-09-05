@@ -3,12 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, AlertTriangle, Info, Check, FileText } from 'lucide-react';
 import {
   getContractById,
+  fetchContractByIdAsync,
   createContract,
   updateContract,
   checkContractOverlap
 } from '../../data/contracts';
-import { getSalaryStructures } from '../../data/salaryStructures';
-import { getEmployees } from '../../data/employees';
+import { getSalaryStructures, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 
 export const ContractForm = () => {
@@ -17,6 +18,7 @@ export const ContractForm = () => {
   const isCreate = !id || id === 'new';
 
   const [employees, setEmployees] = useState([]);
+  const [availableStructures, setAvailableStructures] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [overlapWarning, setOverlapWarning] = useState(null);
@@ -25,40 +27,70 @@ export const ContractForm = () => {
     employeeId: '',
     employeeName: '',
     startDate: new Date().toISOString().split('T')[0],
-    endDate: '2027-12-31',
-    department: 'Engineering',
-    position: 'Software Engineer',
-    wage: 6500,
-    salaryStructure: 'Standard Corporate Structure',
+    endDate: '',
+    department: '',
+    position: '',
+    wage: '',
+    salaryStructure: '',
     status: 'Active',
     notes: ''
   });
 
   const [errors, setErrors] = useState({});
 
+  const populateForm = (existing) => {
+    setFormData({
+      employeeId: existing.employeeId || '',
+      employeeName: existing.employeeName || '',
+      startDate: existing.startDate ? String(existing.startDate).split('T')[0] : '',
+      endDate: existing.endDate ? String(existing.endDate).split('T')[0] : '',
+      department: existing.department || '',
+      position: existing.position || '',
+      wage: existing.wage !== undefined && existing.wage !== null ? existing.wage : '',
+      salaryStructure: existing.salaryStructure || existing.salaryStructureName || '',
+      status: existing.status || 'Active',
+      notes: existing.notes || ''
+    });
+  };
+
   useEffect(() => {
     const empList = getEmployees();
     setEmployees(empList);
+    setAvailableStructures(getSalaryStructures());
+
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) {
+        setEmployees(list);
+        if (isCreate && list.length > 0 && !formData.employeeId) {
+          const first = list[0];
+          setFormData((prev) => ({
+            ...prev,
+            employeeId: first.id,
+            employeeName: first.name,
+            department: first.department || '',
+            position: first.position || ''
+          }));
+        }
+      }
+    }).catch(console.error);
+
+    fetchSalaryStructuresAsync().then((structs) => {
+      if (Array.isArray(structs)) {
+        setAvailableStructures(structs);
+        if (isCreate && structs.length > 0 && !formData.salaryStructure) {
+          setFormData((prev) => ({ ...prev, salaryStructure: structs[0].name }));
+        }
+      }
+    }).catch(console.error);
 
     if (!isCreate) {
       const existing = getContractById(id);
       if (existing) {
-        setFormData({
-          employeeId: existing.employeeId || '',
-          employeeName: existing.employeeName || '',
-          startDate: existing.startDate || '',
-          endDate: existing.endDate || '',
-          department: existing.department || 'Engineering',
-          position: existing.position || '',
-          wage: existing.wage || 6500,
-          salaryStructure: existing.salaryStructure || 'Standard Corporate Structure',
-          status: existing.status || 'Active',
-          notes: existing.notes || ''
-        });
-      } else {
-        alert('Contract record not found');
-        navigate('/contracts');
+        populateForm(existing);
       }
+      fetchContractByIdAsync(id).then((fresh) => {
+        if (fresh) populateForm(fresh);
+      }).catch(console.error);
     } else {
       if (empList.length > 0) {
         const first = empList[0];
@@ -66,12 +98,12 @@ export const ContractForm = () => {
           ...prev,
           employeeId: first.id,
           employeeName: first.name,
-          department: first.department,
-          position: first.position
+          department: first.department || '',
+          position: first.position || ''
         }));
       }
     }
-  }, [id, isCreate, navigate]);
+  }, [id, isCreate]);
 
   // Check client-side overlap warning whenever employeeId, status, or date range changes
   useEffect(() => {
@@ -135,19 +167,11 @@ export const ContractForm = () => {
     }
   };
 
-  const [availableStructures, setAvailableStructures] = useState([]);
-
-  useEffect(() => {
-    setAvailableStructures(getSalaryStructures());
-  }, []);
-
   const salaryStructures = [
     ...new Set([
-      ...availableStructures.map((s) => s.name),
-      'Standard Corporate Structure',
-      'Executive Leadership Structure',
-      'Part-Time Hourly Structure'
-    ])
+      ...availableStructures.map((s) => s.name).filter(Boolean),
+      formData.salaryStructure
+    ].filter(Boolean))
   ];
 
   return (

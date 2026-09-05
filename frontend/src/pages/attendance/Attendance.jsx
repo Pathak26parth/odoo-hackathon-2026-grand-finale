@@ -32,11 +32,11 @@ export const Attendance = () => {
     setEmployees(getEmployees());
 
     fetchAttendanceRecordsAsync().then((list) => {
-      if (list && list.length > 0) setRecords(list);
+      if (Array.isArray(list)) setRecords(list);
     }).catch(console.error);
 
     fetchEmployeesAsync().then((emps) => {
-      if (emps && emps.length > 0) setEmployees(emps);
+      if (Array.isArray(emps)) setEmployees(emps);
     }).catch(console.error);
   }, []);
 

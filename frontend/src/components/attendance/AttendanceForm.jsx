@@ -12,9 +12,9 @@ export const AttendanceForm = ({
   canManualCorrect = true
 }) => {
   const [formData, setFormData] = useState({
-    employeeId: initialData.employeeId || (employees[0]?.id || 'emp-1'),
-    employeeName: initialData.employeeName || (employees[0]?.name || 'Amelia Johnson'),
-    department: initialData.department || (employees[0]?.department || 'Engineering'),
+    employeeId: initialData.employeeId || employees[0]?.id || '',
+    employeeName: initialData.employeeName || employees[0]?.name || '',
+    department: initialData.department || employees[0]?.department || '',
     date: initialData.date || new Date().toISOString().split('T')[0],
     checkIn: initialData.checkIn || '09:00',
     checkOut: initialData.checkOut || '17:30',

@@ -123,7 +123,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
               {renderSingleLink(
                 isEmployeeOnly ? 'My Profile' : 'Employees',
                 isEmployeeOnly
-                  ? `/employees/${currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1'}`
+                  ? `/employees/${currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || ''}`
                   : '/employees',
                 Users
               )}

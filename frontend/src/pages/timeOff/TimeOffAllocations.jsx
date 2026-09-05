@@ -35,15 +35,15 @@ export const TimeOffAllocations = () => {
     setEmployees(getEmployees());
 
     fetchAllocationsAsync().then((list) => {
-      if (list && list.length > 0) setAllocations(list);
+      if (Array.isArray(list)) setAllocations(list);
     }).catch(console.error);
 
     fetchTimeOffTypesAsync().then((list) => {
-      if (list && list.length > 0) setTypes(list);
+      if (Array.isArray(list)) setTypes(list);
     }).catch(console.error);
 
     fetchEmployeesAsync().then((list) => {
-      if (list && list.length > 0) setEmployees(list);
+      if (Array.isArray(list)) setEmployees(list);
     }).catch(console.error);
   }, []);
 

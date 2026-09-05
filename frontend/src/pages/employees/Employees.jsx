@@ -38,7 +38,7 @@ export const Employees = () => {
   useEffect(() => {
     setEmployees(getEmployees());
     fetchEmployeesAsync().then((list) => {
-      if (list && list.length > 0) setEmployees(list);
+      if (Array.isArray(list)) setEmployees(list);
     }).catch(console.error);
   }, []);
 
@@ -52,10 +52,17 @@ export const Employees = () => {
 
   // Filtered dataset
   const filteredEmployees = employees.filter((emp) => {
+    if (!emp) return false;
+    const empName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee').toLowerCase();
+    const empPosition = (emp.position || emp.jobPosition || '').toLowerCase();
+    const empDept = (emp.department || emp.departmentName || '').toLowerCase();
+    const search = (searchTerm || '').toLowerCase().trim();
+
     const matchesSearch =
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.department.toLowerCase().includes(searchTerm.toLowerCase());
+      !search ||
+      empName.includes(search) ||
+      empPosition.includes(search) ||
+      empDept.includes(search);
     const matchesDept = deptFilter === 'All' || emp.department === deptFilter;
     const matchesStatus = statusFilter === 'All' || emp.status === statusFilter;
     return matchesSearch && matchesDept && matchesStatus;
@@ -66,30 +73,35 @@ export const Employees = () => {
     currentPage * pageSize
   );
 
-  const departments = ['All', 'Engineering', 'Human Resources', 'Finance', 'Sales', 'Design'];
+  const departments = ['All', ...new Set(employees.map((e) => e.department).filter(Boolean))];
 
   // Table columns for List View
   const columns = [
     {
       header: 'Employee',
       key: 'name',
-      render: (row) => (
-        <div className="flex items-center gap-3">
-          <img
-            src={row.avatar}
-            alt={row.name}
-            className="w-8 h-8 rounded-full object-cover border border-slate-200"
-          />
-          <div>
-            <span className="font-bold text-slate-900 block leading-tight">{row.name}</span>
-            <span className="text-[11px] text-slate-400">{row.email}</span>
+      render: (row) => {
+        const name = row.name || `${row.firstName || ''} ${row.lastName || ''}`.trim() || 'Employee';
+        const avatar = row.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80';
+        return (
+          <div className="flex items-center gap-3">
+            <img
+              src={avatar}
+              alt={name}
+              className="w-8 h-8 rounded-full object-cover border border-slate-200"
+            />
+            <div>
+              <span className="font-bold text-slate-900 block leading-tight">{name}</span>
+              <span className="text-[11px] text-slate-400">{row.email || '—'}</span>
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       header: 'Job Position',
       key: 'position',
+      render: (row) => row.position || row.jobPosition || 'Employee',
       cellClassName: 'text-slate-800 font-semibold'
     },
     {
@@ -98,20 +110,21 @@ export const Employees = () => {
       render: (row) => (
         <span className="inline-flex items-center gap-1 text-slate-700 font-medium">
           <Building className="w-3.5 h-3.5 text-slate-400" />
-          {row.department}
+          {row.department || row.departmentName || 'General'}
         </span>
       )
     },
     {
       header: 'Manager',
       key: 'manager',
+      render: (row) => row.manager || row.managerName || 'None',
       cellClassName: 'text-slate-600'
     },
     {
       header: 'Status',
       key: 'status',
       align: 'center',
-      render: (row) => <StatusBadge status={row.status} />
+      render: (row) => <StatusBadge status={row.status || 'Active'} />
     },
     {
       header: 'Action',
@@ -239,45 +252,54 @@ export const Employees = () => {
       ) : viewMode === 'kanban' ? (
         /* KANBAN GRID VIEW */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filteredEmployees.map((emp) => (
-            <div
-              key={emp.id}
-              onClick={() => handleCardClick(emp)}
-              className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between text-xs"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <img
-                    src={emp.avatar}
-                    alt={emp.name}
-                    className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-2xs"
-                  />
-                  <StatusBadge status={emp.status} />
+          {filteredEmployees.map((emp) => {
+            const name = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee';
+            const position = emp.position || emp.jobPosition || 'Employee';
+            const department = emp.department || emp.departmentName || 'General';
+            const manager = emp.manager || emp.managerName || 'None';
+            const avatar = emp.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80';
+            const status = emp.status || 'Active';
+
+            return (
+              <div
+                key={emp.id}
+                onClick={() => handleCardClick(emp)}
+                className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between text-xs"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <img
+                      src={avatar}
+                      alt={name}
+                      className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-2xs"
+                    />
+                    <StatusBadge status={status} />
+                  </div>
+
+                  <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm truncate">
+                    {name}
+                  </h3>
+                  <p className="text-slate-600 font-medium truncate mt-0.5">{position}</p>
+
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-slate-500 text-[11px]">
+                    <p className="flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{department}</span>
+                    </p>
+                    <p className="flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">Manager: {manager}</span>
+                    </p>
+                  </div>
                 </div>
 
-                <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm truncate">
-                  {emp.name}
-                </h3>
-                <p className="text-slate-600 font-medium truncate mt-0.5">{emp.position}</p>
-
-                <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-slate-500 text-[11px]">
-                  <p className="flex items-center gap-1.5">
-                    <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{emp.department}</span>
-                  </p>
-                  <p className="flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">Manager: {emp.manager}</span>
-                  </p>
+                <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-blue-600 font-semibold group-hover:translate-x-0.5 transition-transform">
+                  <span>View Profile</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
                 </div>
               </div>
-
-              <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-blue-600 font-semibold group-hover:translate-x-0.5 transition-transform">
-                <span>View Profile</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         /* LIST VIEW */

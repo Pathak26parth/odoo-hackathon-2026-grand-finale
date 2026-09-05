@@ -52,8 +52,9 @@ export const SendPayslipsModal = ({ isOpen, onClose, payrun, payslips = [], onFi
       const slip = payslips.find((s) => s.id === id);
       await new Promise((r) => setTimeout(r, 250));
 
-      // Simulate failure if employee is emp-4 or no email
-      const isFailed = slip?.employeeId === 'emp-4';
+      // Check if employee has an email address
+      const empEmail = slip?.employeeEmail || slip?.email;
+      const isFailed = !empEmail && (!slip?.employeeName || slip.employeeName.trim() === '');
       const status = isFailed ? 'Failed' : 'Sent';
       workingStatuses[id] = status;
       setDeliveryStatuses({ ...workingStatuses });
@@ -162,11 +163,7 @@ export const SendPayslipsModal = ({ isOpen, onClose, payrun, payslips = [], onFi
                       </td>
                       <td className="py-3 px-2 font-medium text-slate-900">{s.employeeName}</td>
                       <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">
-                        {s.employeeId === 'emp-4' ? (
-                          <span className="text-rose-500 italic">missing@email.com</span>
-                        ) : (
-                          `${s.employeeName.toLowerCase().replace(' ', '.')}@peoplepay360.com`
-                        )}
+                        {s.employeeEmail || s.email || (s.employeeName ? `${s.employeeName.toLowerCase().replace(/\s+/g, '.')}@peoplepay360.com` : 'No email')}
                       </td>
                       <td className="py-3 px-3 text-slate-600 font-mono">{s.slipNumber}</td>
                       <td className="py-3 px-3 text-right">

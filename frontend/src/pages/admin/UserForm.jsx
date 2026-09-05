@@ -28,7 +28,7 @@ export const UserForm = () => {
     setEmployees(empList);
 
     fetchEmployeesAsync().then((list) => {
-      if (list && list.length > 0) setEmployees(list);
+      if (Array.isArray(list)) setEmployees(list);
     }).catch(console.error);
 
     if (isEdit) {
@@ -53,10 +53,6 @@ export const UserForm = () => {
           });
         }
       }).catch(console.error);
-    } else {
-      if (empList.length > 0) {
-        setFormData((prev) => ({ ...prev, employeeId: empList[0].id }));
-      }
     }
   }, [id, isEdit]);
 

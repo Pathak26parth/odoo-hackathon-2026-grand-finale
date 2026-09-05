@@ -4,10 +4,10 @@ import { CalendarCheck, Clock, CheckCircle2, XCircle, PieChart } from 'lucide-re
 
 export const TimeOffOverview = ({ timeOffStats = {} }) => {
   const {
-    approvedDays = 14,
-    pendingRequests = 3,
-    refusedRequests = 1,
-    remainingBalance = 142
+    approvedDays = 0,
+    pendingRequests = 0,
+    refusedRequests = 0,
+    remainingBalance = 0
   } = timeOffStats;
 
   return (

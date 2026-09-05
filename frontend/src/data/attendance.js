@@ -28,7 +28,7 @@ export const saveAttendanceToStorage = (records) => {
 export const fetchAttendanceAsync = async (params = {}) => {
   try {
     const records = await attendanceService.getAllAttendance(params);
-    if (records && records.length > 0) {
+    if (Array.isArray(records)) {
       saveAttendanceToStorage(records);
       return records;
     }

@@ -38,7 +38,7 @@ export const EmployeeDetail = () => {
     phone: '',
     avatar: DEFAULT_PHOTO,
     department: 'Engineering',
-    manager: 'Ethan Williams',
+    manager: 'None',
     position: '',
     schedule: 'Standard 40 Hours',
     status: 'Active'
@@ -91,11 +91,11 @@ export const EmployeeDetail = () => {
       lastName: existing.lastName || existing.last_name || existing.name?.split(' ').slice(1).join(' ') || '',
       employeeId: existing.employeeId || existing.employee_code || existing.id || '',
       email: existing.email || '',
-      phone: existing.phone || '+1 (555) 000-0000',
+      phone: existing.phone || '',
       avatar: resolvedPhoto,
       profilePhotoUrl: resolvedPhoto,
-      department: existing.department || existing.department_name || 'Engineering',
-      manager: existing.manager || existing.manager_name || 'Ethan Williams',
+      department: existing.department || existing.department_name || '',
+      manager: existing.manager || existing.manager_name || 'None',
       position: existing.position || existing.job_position || '',
       schedule: existing.schedule || existing.schedule_name || 'Standard 40 Hours',
       status: existing.status || (existing.is_active ? 'Active' : 'Inactive')
@@ -107,7 +107,7 @@ export const EmployeeDetail = () => {
     setAllEmployees(list);
 
     fetchEmployeesAsync().then((fetchedList) => {
-      if (fetchedList && fetchedList.length > 0) setAllEmployees(fetchedList);
+      if (Array.isArray(fetchedList)) setAllEmployees(fetchedList);
     }).catch(console.error);
 
     if (!isCreate) {
