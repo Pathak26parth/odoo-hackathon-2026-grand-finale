@@ -4,10 +4,11 @@ import { Plus, Check, Search, Filter, CalendarCheck, Calendar } from 'lucide-rea
 import {
   getTimeOffRequests,
   approveTimeOffRequest,
-  refuseTimeOffRequest
+  refuseTimeOffRequest,
+  fetchTimeOffRequestsAsync
 } from '../../data/timeOffRequests';
-import { getTimeOffTypes } from '../../data/timeOffTypes';
-import { getEmployees } from '../../data/employees';
+import { getTimeOffTypes, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -46,6 +47,18 @@ export const TimeOffRequests = () => {
     setRequests(getTimeOffRequests());
     setTypes(getTimeOffTypes());
     setEmployees(getEmployees());
+
+    fetchTimeOffRequestsAsync().then((list) => {
+      if (list && list.length > 0) setRequests(list);
+    }).catch(console.error);
+
+    fetchTimeOffTypesAsync().then((list) => {
+      if (list && list.length > 0) setTypes(list);
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((list) => {
+      if (list && list.length > 0) setEmployees(list);
+    }).catch(console.error);
   };
 
   useEffect(() => {
@@ -93,15 +106,15 @@ export const TimeOffRequests = () => {
     });
   };
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
     const req = modalConfig.request;
     if (!req) return;
 
     if (modalConfig.type === 'approve') {
-      approveTimeOffRequest(req.id, currentUser?.name || 'HR Manager');
+      await approveTimeOffRequest(req.id, currentUser?.name || 'HR Manager');
       setToastMessage(`Request for ${req.employeeName} approved! Leave balance updated.`);
     } else {
-      refuseTimeOffRequest(req.id, currentUser?.name || 'HR Manager');
+      await refuseTimeOffRequest(req.id, currentUser?.name || 'HR Manager');
       setToastMessage(`Request for ${req.employeeName} was refused.`);
     }
 

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Filter, PieChart } from 'lucide-react';
-import { getAllocations } from '../../data/allocations';
-import { getTimeOffTypes } from '../../data/timeOffTypes';
-import { getEmployees } from '../../data/employees';
+import { getAllocations, fetchAllocationsAsync } from '../../data/allocations';
+import { getTimeOffTypes, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -33,6 +33,18 @@ export const TimeOffAllocations = () => {
     setAllocations(getAllocations());
     setTypes(getTimeOffTypes());
     setEmployees(getEmployees());
+
+    fetchAllocationsAsync().then((list) => {
+      if (list && list.length > 0) setAllocations(list);
+    }).catch(console.error);
+
+    fetchTimeOffTypesAsync().then((list) => {
+      if (list && list.length > 0) setTypes(list);
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((list) => {
+      if (list && list.length > 0) setEmployees(list);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {

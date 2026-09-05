@@ -7,23 +7,27 @@ export const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState();
-  const [password, setPassword] = useState();
+  const [email, setEmail] = useState('admin@peoplepay360.com');
+  const [password, setPassword] = useState('Admin@123');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      login(email, password);
-      navigate('/admin/users');
+      const user = await login(email, password);
+      if (user.role === 'Admin' || user.role === 'HR Payroll Manager' || user.role === 'HR Manager') {
+        navigate('/dashboard');
+      } else {
+        navigate('/employees');
+      }
     } catch (err) {
-      setError(err.message || 'Invalid credentials');
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -142,9 +146,9 @@ export const Login = () => {
           {/* Quick Credential Hint */}
           <div className="mt-6 pt-4 border-t border-slate-100 text-center">
             <p className="text-[11px] text-slate-500">
-              Demo Credentials:{' '}
+              Admin Credentials:{' '}
               <strong className="text-slate-800 font-mono">admin@peoplepay360.com</strong> /{' '}
-              <strong className="text-slate-800 font-mono">admin123</strong>
+              <strong className="text-slate-800 font-mono">Admin@123</strong>
             </p>
           </div>
         </div>

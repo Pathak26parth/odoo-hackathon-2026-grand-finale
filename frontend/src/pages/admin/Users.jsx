@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Filter, Users as UsersIcon, Shield } from 'lucide-react';
-import { getUsers } from '../../data/users';
+import { getUsers, fetchUsersAsync } from '../../data/users';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -18,6 +18,9 @@ export const Users = () => {
 
   useEffect(() => {
     setUsers(getUsers());
+    fetchUsersAsync().then((list) => {
+      if (list && list.length > 0) setUsers(list);
+    }).catch(console.error);
   }, []);
 
   // Filtered users list

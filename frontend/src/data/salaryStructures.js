@@ -1,100 +1,88 @@
+import payrollService, { normalizeStructure } from '../services/payrollService';
+
 const STORAGE_KEY = 'peoplepay360_salary_structures_data';
 
-export const INITIAL_SALARY_STRUCTURES = [
-  {
-    id: 'struct-1',
-    name: 'Standard Monthly Salary',
-    description: 'Standard salary structure for full-time employees with basic pay, allowances, and statutory tax withholdings.',
-    ruleIds: ['rule-1', 'rule-2', 'rule-3', 'rule-4', 'rule-5', 'rule-6', 'rule-7'],
-    ruleCount: 7,
-    assignedEmployees: 24,
-    status: 'Active'
-  },
-  {
-    id: 'struct-2',
-    name: 'Executive Salary Structure',
-    description: 'Salary structure for management and executive employees with extended allowances and incentive coverage.',
-    ruleIds: ['rule-1', 'rule-2', 'rule-3', 'rule-4', 'rule-5', 'rule-6', 'rule-7'],
-    ruleCount: 7,
-    assignedEmployees: 8,
-    status: 'Active'
-  },
-  {
-    id: 'struct-3',
-    name: 'Part-Time Salary',
-    description: 'Hour-based and flexible shift salary structure with simplified allowance and withholding rules.',
-    ruleIds: ['rule-1', 'rule-3', 'rule-5', 'rule-7'],
-    ruleCount: 4,
-    assignedEmployees: 12,
-    status: 'Active'
-  }
-];
+export const INITIAL_STRUCTURES = [];
 
 export const getSalaryStructures = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (err) {
-    console.error('Error reading salary structures from localStorage:', err);
+    console.error('Error reading salary structures cache:', err);
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SALARY_STRUCTURES));
-  return INITIAL_SALARY_STRUCTURES;
+  return INITIAL_STRUCTURES;
 };
 
-export const saveSalaryStructuresToStorage = (structures) => {
+export const saveSalaryStructuresToStorage = (list) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(structures));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch (err) {
-    console.error('Error saving salary structures to localStorage:', err);
+    console.error('Error saving salary structures cache:', err);
   }
+};
+
+export const fetchSalaryStructuresAsync = async () => {
+  try {
+    const structures = await payrollService.getSalaryStructures();
+    if (structures && structures.length > 0) {
+      saveSalaryStructuresToStorage(structures);
+      return structures;
+    }
+  } catch (err) {
+    console.warn('[Data Bridge] Could not fetch salary structures:', err.message);
+  }
+  return getSalaryStructures();
 };
 
 export const getSalaryStructureById = (id) => {
   const list = getSalaryStructures();
-  return list.find((s) => s.id === id) || null;
+  return list.find((s) => String(s.id) === String(id)) || null;
 };
 
-export const createSalaryStructure = (data) => {
-  const list = getSalaryStructures();
-  const ruleIds = data.ruleIds || [];
-  const newStructure = {
-    id: `struct-${Date.now()}`,
-    name: data.name || '',
-    description: data.description || '',
-    ruleIds,
-    ruleCount: ruleIds.length,
-    assignedEmployees: data.assignedEmployees || 0,
-    status: data.status || 'Active'
-  };
-
-  const updated = [...list, newStructure];
-  saveSalaryStructuresToStorage(updated);
-  return newStructure;
+export const createSalaryStructure = async (data) => {
+  try {
+    const res = await payrollService.createSalaryStructure(data);
+    await fetchSalaryStructuresAsync();
+    return res;
+  } catch (err) {
+    console.warn('Backend create salary structure fallback:', err.message);
+    const list = getSalaryStructures();
+    const newStruct = { id: String(Date.now()), ...data };
+    saveSalaryStructuresToStorage([newStruct, ...list]);
+    return newStruct;
+  }
 };
 
-export const updateSalaryStructure = (id, data) => {
-  const list = getSalaryStructures();
-  const index = list.findIndex((s) => s.id === id);
-  if (index === -1) return null;
-
-  const ruleIds = data.ruleIds || list[index].ruleIds || [];
-  const updated = {
-    ...list[index],
-    ...data,
-    ruleIds,
-    ruleCount: ruleIds.length
-  };
-
-  list[index] = updated;
-  saveSalaryStructuresToStorage(list);
-  return updated;
+export const updateSalaryStructure = async (id, data) => {
+  try {
+    const res = await payrollService.updateSalaryStructure(id, data);
+    await fetchSalaryStructuresAsync();
+    return res;
+  } catch (err) {
+    console.warn('Backend update salary structure fallback:', err.message);
+    const list = getSalaryStructures();
+    const idx = list.findIndex((s) => String(s.id) === String(id));
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...data };
+      saveSalaryStructuresToStorage(list);
+    }
+    return data;
+  }
 };
 
-export const deleteSalaryStructure = (id) => {
-  const list = getSalaryStructures();
-  const updated = list.filter((s) => s.id !== id);
-  saveSalaryStructuresToStorage(updated);
-  return true;
+export const deleteSalaryStructure = async (id) => {
+  try {
+    const res = await payrollService.deleteSalaryStructure(id);
+    await fetchSalaryStructuresAsync();
+    return res;
+  } catch (err) {
+    console.error('Delete salary structure failed on backend:', err.message);
+    const list = getSalaryStructures().filter((s) => String(s.id) !== String(id));
+    saveSalaryStructuresToStorage(list);
+    return true;
+  }
 };

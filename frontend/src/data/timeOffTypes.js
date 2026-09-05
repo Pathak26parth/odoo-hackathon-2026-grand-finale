@@ -1,128 +1,88 @@
-const STORAGE_KEY = 'peoplepay360_timeoff_types_data';
+import timeOffService, { normalizeLeaveType } from '../services/timeOffService';
 
-export const INITIAL_TIMEOFF_TYPES = [
-  {
-    id: 'tot-1',
-    name: 'Annual Leave',
-    description: 'Standard paid vacation and annual leave allowance for employees.',
-    unit: 'Days',
-    requiresAllocation: true,
-    requiresApproval: true,
-    payrollIntegration: true,
-    status: 'Active'
-  },
-  {
-    id: 'tot-2',
-    name: 'Sick Leave',
-    description: 'Medical and sick recovery leave supported by medical documentation.',
-    unit: 'Days',
-    requiresAllocation: true,
-    requiresApproval: true,
-    payrollIntegration: true,
-    status: 'Active'
-  },
-  {
-    id: 'tot-3',
-    name: 'Casual Leave',
-    description: 'Short-notice personal leave for urgent personal errands.',
-    unit: 'Days',
-    requiresAllocation: true,
-    requiresApproval: true,
-    payrollIntegration: false,
-    status: 'Active'
-  },
-  {
-    id: 'tot-4',
-    name: 'Unpaid Leave',
-    description: 'Time off without pay applicable when all statutory allowances are exhausted.',
-    unit: 'Days',
-    requiresAllocation: false,
-    requiresApproval: true,
-    payrollIntegration: true,
-    status: 'Active'
-  },
-  {
-    id: 'tot-5',
-    name: 'Maternity Leave',
-    description: 'Statutory maternal care leave for eligible female employees.',
-    unit: 'Days',
-    requiresAllocation: true,
-    requiresApproval: true,
-    payrollIntegration: true,
-    status: 'Active'
-  },
-  {
-    id: 'tot-6',
-    name: 'Compensatory Off',
-    description: 'Time off granted in exchange for worked overtime or holiday shifts.',
-    unit: 'Hours',
-    requiresAllocation: true,
-    requiresApproval: true,
-    payrollIntegration: false,
-    status: 'Active'
-  }
-];
+const STORAGE_KEY = 'peoplepay360_time_off_types_data';
+
+export const INITIAL_TIME_OFF_TYPES = [];
 
 export const getTimeOffTypes = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (err) {
-    console.error('Error loading time off types:', err);
+    console.error('Error reading time off types cache:', err);
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_TIMEOFF_TYPES));
-  return INITIAL_TIMEOFF_TYPES;
+  return INITIAL_TIME_OFF_TYPES;
 };
 
-export const saveTimeOffTypesToStorage = (types) => {
+export const saveTimeOffTypesToStorage = (list) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(types));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch (err) {
-    console.error('Error saving time off types:', err);
+    console.error('Error saving time off types cache:', err);
   }
+};
+
+export const fetchTimeOffTypesAsync = async () => {
+  try {
+    const types = await timeOffService.getTimeOffTypes();
+    if (types && types.length > 0) {
+      saveTimeOffTypesToStorage(types);
+      return types;
+    }
+  } catch (err) {
+    console.warn('[Data Bridge] Could not fetch time off types:', err.message);
+  }
+  return getTimeOffTypes();
 };
 
 export const getTimeOffTypeById = (id) => {
   const list = getTimeOffTypes();
-  return list.find((t) => t.id === id) || null;
+  return list.find((t) => String(t.id) === String(id)) || null;
 };
 
-export const createTimeOffType = (data) => {
-  const list = getTimeOffTypes();
-  const newType = {
-    id: `tot-${Date.now()}`,
-    requiresAllocation: data.requiresAllocation ?? true,
-    requiresApproval: data.requiresApproval ?? true,
-    payrollIntegration: data.payrollIntegration ?? false,
-    status: data.status || 'Active',
-    ...data
-  };
-
-  const updated = [...list, newType];
-  saveTimeOffTypesToStorage(updated);
-  return newType;
+export const createTimeOffType = async (data) => {
+  try {
+    const res = await timeOffService.createTimeOffType(data);
+    await fetchTimeOffTypesAsync();
+    return res;
+  } catch (err) {
+    console.warn('Backend create timeoff type fallback:', err.message);
+    const list = getTimeOffTypes();
+    const newType = { id: String(Date.now()), ...data };
+    saveTimeOffTypesToStorage([newType, ...list]);
+    return newType;
+  }
 };
 
-export const updateTimeOffType = (id, data) => {
-  const list = getTimeOffTypes();
-  const index = list.findIndex((t) => t.id === id);
-  if (index === -1) return null;
-
-  const updatedType = {
-    ...list[index],
-    ...data
-  };
-
-  list[index] = updatedType;
-  saveTimeOffTypesToStorage(list);
-  return updatedType;
+export const updateTimeOffType = async (id, data) => {
+  try {
+    const res = await timeOffService.updateTimeOffType(id, data);
+    await fetchTimeOffTypesAsync();
+    return res;
+  } catch (err) {
+    console.warn('Backend update timeoff type fallback:', err.message);
+    const list = getTimeOffTypes();
+    const idx = list.findIndex((t) => String(t.id) === String(id));
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...data };
+      saveTimeOffTypesToStorage(list);
+    }
+    return data;
+  }
 };
 
-export const deleteTimeOffType = (id) => {
-  const list = getTimeOffTypes();
-  const updated = list.filter((t) => t.id !== id);
-  saveTimeOffTypesToStorage(updated);
-  return true;
+export const deleteTimeOffType = async (id) => {
+  try {
+    const res = await timeOffService.deleteTimeOffType(id);
+    await fetchTimeOffTypesAsync();
+    return res;
+  } catch (err) {
+    console.error('Delete time off type failed on backend:', err.message);
+    const list = getTimeOffTypes().filter((t) => String(t.id) !== String(id));
+    saveTimeOffTypesToStorage(list);
+    return true;
+  }
 };

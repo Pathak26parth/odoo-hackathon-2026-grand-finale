@@ -10,7 +10,7 @@ import {
   Info,
   ArrowUpRight
 } from 'lucide-react';
-import { getEmployees } from '../../data/employees';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -28,6 +28,9 @@ export const Employees = () => {
 
   useEffect(() => {
     setEmployees(getEmployees());
+    fetchEmployeesAsync().then((list) => {
+      if (list && list.length > 0) setEmployees(list);
+    }).catch(console.error);
   }, []);
 
   const handleAddEmployeeClick = () => {

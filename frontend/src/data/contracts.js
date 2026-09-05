@@ -1,165 +1,114 @@
+import contractService, { normalizeContract } from '../services/contractService';
+
 const STORAGE_KEY = 'peoplepay360_contracts_data';
 
-export const INITIAL_CONTRACTS = [
-  {
-    id: 'CTR-001',
-    employeeId: 'emp-1',
-    employeeName: 'Amelia Johnson',
-    startDate: '2025-01-01',
-    endDate: '2026-12-31',
-    department: 'Engineering',
-    position: 'Software Engineer',
-    wage: 7500,
-    salaryStructure: 'Standard Corporate Structure',
-    status: 'Active',
-    notes: 'Senior level permanent employment contract.'
-  },
-  {
-    id: 'CTR-002',
-    employeeId: 'emp-2',
-    employeeName: 'Ethan Williams',
-    startDate: '2024-06-01',
-    endDate: '2026-06-01',
-    department: 'Human Resources',
-    position: 'HR Executive',
-    wage: 6000,
-    salaryStructure: 'Standard Corporate Structure',
-    status: 'Active',
-    notes: 'HR Operations employment contract.'
-  },
-  {
-    id: 'CTR-003',
-    employeeId: 'emp-3',
-    employeeName: 'Olivia Martin',
-    startDate: '2024-08-15',
-    endDate: '2026-08-15',
-    department: 'Finance',
-    position: 'Accountant',
-    wage: 6400,
-    salaryStructure: 'Standard Corporate Structure',
-    status: 'Active',
-    notes: 'Finance and accounting management contract.'
-  },
-  {
-    id: 'CTR-004',
-    employeeId: 'emp-4',
-    employeeName: 'James Anderson',
-    startDate: '2024-01-10',
-    endDate: '2026-01-10',
-    department: 'Sales',
-    position: 'Sales Executive',
-    wage: 5800,
-    salaryStructure: 'Standard Corporate Structure',
-    status: 'Active',
-    notes: 'Enterprise account lead contract.'
-  },
-  {
-    id: 'CTR-005',
-    employeeId: 'emp-5',
-    employeeName: 'Lucas Garcia',
-    startDate: '2026-10-01',
-    endDate: '2027-10-01',
-    department: 'Engineering',
-    position: 'Frontend Developer',
-    wage: 6800,
-    salaryStructure: 'Standard Corporate Structure',
-    status: 'Draft',
-    notes: 'Draft offer for upcoming contract extension.'
-  },
-  {
-    id: 'CTR-006',
-    employeeId: 'emp-1',
-    employeeName: 'Amelia Johnson',
-    startDate: '2023-01-01',
-    endDate: '2024-12-31',
-    department: 'Engineering',
-    position: 'Junior Software Engineer',
-    wage: 5500,
-    salaryStructure: 'Standard Corporate Structure',
-    status: 'Expired',
-    notes: 'Historical junior contract; successfully renewed and completed.'
-  }
-];
+export const INITIAL_CONTRACTS = [];
 
-export const getContracts = (employeeId = null) => {
+export const getContracts = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    let contracts = INITIAL_CONTRACTS;
     if (raw) {
-      contracts = JSON.parse(raw);
-    } else {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_CONTRACTS));
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
-    if (employeeId) {
-      return contracts.filter((c) => c.employeeId === employeeId);
-    }
-    return contracts;
   } catch (err) {
-    console.error('Error reading contracts from localStorage:', err);
-    return INITIAL_CONTRACTS;
+    console.error('Error reading contracts cache:', err);
+  }
+  return INITIAL_CONTRACTS;
+};
+
+export const saveContractsToStorage = (list) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch (err) {
+    console.error('Error saving contracts cache:', err);
   }
 };
 
-export const saveContractsToStorage = (contracts) => {
+export const fetchContractsAsync = async (params = {}) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(contracts));
+    const contracts = await contractService.getContracts(params);
+    if (contracts && contracts.length > 0) {
+      saveContractsToStorage(contracts);
+      return contracts;
+    }
   } catch (err) {
-    console.error('Error saving contracts to localStorage:', err);
+    console.warn('[Data Bridge] Could not fetch contracts:', err.message);
   }
+  return getContracts();
 };
 
 export const getContractById = (id) => {
   const list = getContracts();
-  return list.find((c) => c.id === id) || null;
+  return list.find((c) => String(c.id) === String(id) || c.reference === id) || null;
 };
 
-export const createContract = (data) => {
-  const list = getContracts();
-  const nextNum = list.length + 1;
-  const newContract = {
-    id: `CTR-${String(nextNum).padStart(3, '0')}`,
-    ...data,
-    wage: Number(data.wage) || 5000
-  };
-  const updated = [newContract, ...list];
-  saveContractsToStorage(updated);
-  return newContract;
-};
-
-export const updateContract = (id, data) => {
-  const list = getContracts();
-  const index = list.findIndex((c) => c.id === id);
-  if (index === -1) return null;
-  const updated = {
-    ...list[index],
-    ...data,
-    wage: Number(data.wage) || list[index].wage
-  };
-  list[index] = updated;
-  saveContractsToStorage(list);
-  return updated;
-};
-
-// Check if creating/editing this active contract overlaps an existing active contract
-export const checkContractOverlap = (employeeId, startDate, endDate, excludeId = null) => {
-  if (!employeeId || !startDate) return null;
-  const list = getContracts();
-  const activeContracts = list.filter(
-    (c) => c.employeeId === employeeId && c.status === 'Active' && c.id !== excludeId
-  );
-
-  const newStart = new Date(startDate).getTime();
-  const newEnd = endDate ? new Date(endDate).getTime() : Infinity;
-
-  for (const existing of activeContracts) {
-    const exStart = new Date(existing.startDate).getTime();
-    const exEnd = existing.endDate ? new Date(existing.endDate).getTime() : Infinity;
-
-    // Check overlap: (StartA <= EndB) and (EndA >= StartB)
-    if (newStart <= exEnd && newEnd >= exStart) {
-      return existing;
-    }
+export const fetchContractByIdAsync = async (id) => {
+  try {
+    const ctr = await contractService.getContractById(id);
+    return ctr;
+  } catch (err) {
+    return getContractById(id);
   }
+};
 
-  return null;
+export const checkContractOverlap = (employeeId, startDate, endDate, excludeId = null) => {
+  const all = getContracts();
+  const start = new Date(startDate);
+  const end = endDate ? new Date(endDate) : new Date('2099-12-31');
+
+  return all.find((c) => {
+    if (String(c.employeeId) !== String(employeeId)) return false;
+    if (excludeId && (String(c.id) === String(excludeId) || c.reference === excludeId)) return false;
+    if (c.status !== 'Active') return false;
+
+    const cStart = new Date(c.startDate);
+    const cEnd = c.endDate ? new Date(c.endDate) : new Date('2099-12-31');
+
+    return start <= cEnd && end >= cStart;
+  }) || null;
+};
+
+export const createContract = async (data) => {
+  try {
+    const res = await contractService.createContract(data);
+    await fetchContractsAsync();
+    return res;
+  } catch (err) {
+    console.error('Create contract failed on backend:', err.message);
+    const list = getContracts();
+    const newCtr = { id: String(Date.now()), ...data };
+    saveContractsToStorage([newCtr, ...list]);
+    return newCtr;
+  }
+};
+
+export const updateContract = async (id, data) => {
+  try {
+    const res = await contractService.updateContract(id, data);
+    await fetchContractsAsync();
+    return res;
+  } catch (err) {
+    console.error('Update contract failed on backend:', err.message);
+    const list = getContracts();
+    const idx = list.findIndex((c) => String(c.id) === String(id) || c.reference === id);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...data };
+      saveContractsToStorage(list);
+    }
+    return data;
+  }
+};
+
+export const deleteContract = async (id) => {
+  try {
+    const res = await contractService.deleteContract(id);
+    await fetchContractsAsync();
+    return res;
+  } catch (err) {
+    console.error('Delete contract failed on backend:', err.message);
+    const list = getContracts().filter((c) => String(c.id) !== String(id) && c.reference !== id);
+    saveContractsToStorage(list);
+    return true;
+  }
 };

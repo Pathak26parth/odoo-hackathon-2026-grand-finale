@@ -11,13 +11,13 @@ import {
   Building2,
   Users
 } from 'lucide-react';
-import { getEmployees } from '../../data/employees';
-import { getContracts } from '../../data/contracts';
-import { getAttendanceRecords } from '../../data/attendance';
-import { getFaceHistory } from '../../data/faceAttendance';
-import { getTimeOffRequests } from '../../data/timeOffRequests';
-import { getPayruns } from '../../data/payruns';
-import { getPayslips } from '../../data/payslips';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import { getContracts, fetchContractsAsync } from '../../data/contracts';
+import { getAttendanceRecords, fetchAttendanceRecordsAsync } from '../../data/attendance';
+import { getFaceHistory, fetchFaceHistoryAsync } from '../../data/faceAttendance';
+import { getTimeOffRequests, fetchTimeOffRequestsAsync } from '../../data/timeOffRequests';
+import { getPayruns, fetchPayrunsAsync } from '../../data/payruns';
+import { getPayslips, fetchPayslipsAsync } from '../../data/payslips';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 import { MetricCard } from '../../components/dashboard/MetricCard';
@@ -51,6 +51,15 @@ export const Dashboard = () => {
     setTimeOff(getTimeOffRequests());
     setPayruns(getPayruns());
     setPayslips(getPayslips());
+
+    // Async hydration from backend
+    fetchEmployeesAsync().then((res) => { if (res?.length) setEmployees(res); }).catch(console.error);
+    fetchContractsAsync().then((res) => { if (res?.length) setContracts(res); }).catch(console.error);
+    fetchAttendanceRecordsAsync().then((res) => { if (res?.length) setAttendance(res); }).catch(console.error);
+    fetchFaceHistoryAsync().then((res) => { if (res?.length) setFaceHistory(res); }).catch(console.error);
+    fetchTimeOffRequestsAsync().then((res) => { if (res?.length) setTimeOff(res); }).catch(console.error);
+    fetchPayrunsAsync().then((res) => { if (res?.length) setPayruns(res); }).catch(console.error);
+    fetchPayslipsAsync().then((res) => { if (res?.length) setPayslips(res); }).catch(console.error);
   }, []);
 
   // Filtered employees

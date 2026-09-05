@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, AlertCircle, Save } from 'lucide-react';
-import { getUserById, createUser, updateUser } from '../../data/users';
-import { getEmployees } from '../../data/employees';
+import { getUserById, createUser, updateUser, fetchUserByIdAsync } from '../../data/users';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 
 export const UserForm = () => {
@@ -27,6 +27,10 @@ export const UserForm = () => {
     const empList = getEmployees();
     setEmployees(empList);
 
+    fetchEmployeesAsync().then((list) => {
+      if (list && list.length > 0) setEmployees(list);
+    }).catch(console.error);
+
     if (isEdit) {
       const existing = getUserById(id);
       if (existing) {
@@ -37,16 +41,24 @@ export const UserForm = () => {
           role: existing.role || 'Employee',
           status: existing.status || 'Active'
         });
-      } else {
-        alert('User not found');
-        navigate('/admin/users');
       }
+      fetchUserByIdAsync(id).then((fresh) => {
+        if (fresh) {
+          setFormData({
+            name: fresh.name || '',
+            email: fresh.email || '',
+            employeeId: fresh.employeeId || '',
+            role: fresh.role || 'Employee',
+            status: fresh.status || 'Active'
+          });
+        }
+      }).catch(console.error);
     } else {
       if (empList.length > 0) {
         setFormData((prev) => ({ ...prev, employeeId: empList[0].id }));
       }
     }
-  }, [id, isEdit, navigate]);
+  }, [id, isEdit]);
 
   const validate = () => {
     const errs = {};
@@ -65,13 +77,13 @@ export const UserForm = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setSubmitting(true);
     try {
-      const matchedEmployee = employees.find((emp) => emp.id === formData.employeeId);
+      const matchedEmployee = employees.find((emp) => String(emp.id) === String(formData.employeeId));
       const payload = {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -82,9 +94,9 @@ export const UserForm = () => {
       };
 
       if (isEdit) {
-        updateUser(id, payload);
+        await updateUser(id, payload);
       } else {
-        createUser(payload);
+        await createUser(payload);
       }
 
       setToastMessage(isEdit ? 'User updated successfully!' : 'User created successfully!');

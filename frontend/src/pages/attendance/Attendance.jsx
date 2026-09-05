@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Clock, Search, Filter, Calendar } from 'lucide-react';
-import { getAttendanceRecords } from '../../data/attendance';
-import { getEmployees } from '../../data/employees';
+import { getAttendanceRecords, fetchAttendanceRecordsAsync } from '../../data/attendance';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -30,6 +30,14 @@ export const Attendance = () => {
   useEffect(() => {
     setRecords(getAttendanceRecords());
     setEmployees(getEmployees());
+
+    fetchAttendanceRecordsAsync().then((list) => {
+      if (list && list.length > 0) setRecords(list);
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((emps) => {
+      if (emps && emps.length > 0) setEmployees(emps);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {

@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera } from 'lucide-react';
-import { getEmployeeById, createEmployee, updateEmployee, getEmployees } from '../../data/employees';
+import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2 } from 'lucide-react';
+import { getEmployeeById, createEmployee, updateEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { EmployeeSmartActions } from '../../components/employees/EmployeeSmartActions';
 import { StatusBadge } from '../../components/common/StatusBadge';
+
+const DEFAULT_PHOTO = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
 
 export const EmployeeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isCreate = !id || id === 'new';
+  const fileInputRef = useRef(null);
 
   const [isEditing, setIsEditing] = useState(isCreate);
   const [employee, setEmployee] = useState(null);
@@ -24,7 +27,7 @@ export const EmployeeDetail = () => {
     employeeId: '',
     email: '',
     phone: '',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatar: DEFAULT_PHOTO,
     department: 'Engineering',
     manager: 'Ethan Williams',
     position: '',
@@ -32,31 +35,78 @@ export const EmployeeDetail = () => {
     status: 'Active'
   });
 
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (JPG, PNG, WEBP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Photo file size must be less than 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target?.result;
+      if (base64Data) {
+        setFormData((prev) => ({
+          ...prev,
+          avatar: base64Data,
+          profilePhotoUrl: base64Data
+        }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setFormData((prev) => ({
+      ...prev,
+      avatar: DEFAULT_PHOTO,
+      profilePhotoUrl: DEFAULT_PHOTO
+    }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const populateForm = (existing) => {
+    setEmployee(existing);
+    setFormData({
+      firstName: existing.firstName || existing.first_name || existing.name?.split(' ')[0] || '',
+      lastName: existing.lastName || existing.last_name || existing.name?.split(' ').slice(1).join(' ') || '',
+      employeeId: existing.employeeId || existing.employee_code || existing.id || '',
+      email: existing.email || '',
+      phone: existing.phone || '+1 (555) 000-0000',
+      avatar: existing.avatar || existing.profile_photo_url || DEFAULT_PHOTO,
+      department: existing.department || existing.department_name || 'Engineering',
+      manager: existing.manager || existing.manager_name || 'Ethan Williams',
+      position: existing.position || existing.job_position || '',
+      schedule: existing.schedule || existing.schedule_name || 'Standard 40 Hours',
+      status: existing.status || (existing.is_active ? 'Active' : 'Inactive')
+    });
+  };
+
   useEffect(() => {
     const list = getEmployees();
     setAllEmployees(list);
 
+    fetchEmployeesAsync().then((fetchedList) => {
+      if (fetchedList && fetchedList.length > 0) setAllEmployees(fetchedList);
+    }).catch(console.error);
+
     if (!isCreate) {
       const existing = getEmployeeById(id);
       if (existing) {
-        setEmployee(existing);
-        setFormData({
-          firstName: existing.firstName || existing.name?.split(' ')[0] || '',
-          lastName: existing.lastName || existing.name?.split(' ').slice(1).join(' ') || '',
-          employeeId: existing.employeeId || existing.id || '',
-          email: existing.email || '',
-          phone: existing.phone || '+1 (555) 000-0000',
-          avatar: existing.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-          department: existing.department || 'Engineering',
-          manager: existing.manager || 'Ethan Williams',
-          position: existing.position || '',
-          schedule: existing.schedule || 'Standard 40 Hours',
-          status: existing.status || 'Active'
-        });
-      } else {
-        alert('Employee not found');
-        navigate('/employees');
+        populateForm(existing);
       }
+      fetchEmployeeByIdAsync(id).then((fresh) => {
+        if (fresh) populateForm(fresh);
+      }).catch(console.error);
     } else {
       // Auto-generate employee ID for create mode
       setFormData((prev) => ({
@@ -64,7 +114,7 @@ export const EmployeeDetail = () => {
         employeeId: `EMP-${String(list.length + 1).padStart(3, '0')}`
       }));
     }
-  }, [id, isCreate, navigate]);
+  }, [id, isCreate]);
 
   const validate = () => {
     const errs = {};
@@ -83,17 +133,17 @@ export const EmployeeDetail = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setSubmitting(true);
     try {
       if (isCreate) {
-        createEmployee(formData);
+        await createEmployee(formData);
         setToastMessage('Employee created successfully!');
       } else {
-        updateEmployee(id, formData);
+        await updateEmployee(id, formData);
         setToastMessage('Employee details updated successfully!');
       }
 
@@ -178,24 +228,64 @@ export const EmployeeDetail = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-6 items-start">
-            {/* Avatar block */}
-            <div className="flex flex-col items-center gap-2 shrink-0">
-              <img
-                src={formData.avatar}
-                alt={formData.firstName || 'Employee'}
-                className="w-20 h-20 rounded-xl object-cover border border-slate-200 shadow-2xs"
+            {/* Avatar block with file upload */}
+            <div className="flex flex-col items-center gap-2.5 shrink-0">
+              <div
+                className={`relative group rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm ${
+                  isEditing ? 'cursor-pointer hover:border-blue-500 transition-all' : ''
+                }`}
+                onClick={() => {
+                  if (isEditing && fileInputRef.current) {
+                    fileInputRef.current.click();
+                  }
+                }}
+                title={isEditing ? 'Click to upload photo' : ''}
+              >
+                <img
+                  src={formData.avatar}
+                  alt={formData.firstName || 'Employee'}
+                  className="w-24 h-24 rounded-2xl object-cover bg-slate-100"
+                />
+                {isEditing && (
+                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[11px] font-semibold gap-1 backdrop-blur-2xs">
+                    <Upload className="w-5 h-5" />
+                    <span>Upload</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/png, image/jpeg, image/jpg, image/webp"
+                onChange={handlePhotoUpload}
+                className="hidden"
               />
+
               {isEditing && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = prompt('Enter image avatar URL:', formData.avatar);
-                    if (url) setFormData({ ...formData, avatar: url });
-                  }}
-                  className="text-[11px] text-blue-600 hover:underline font-semibold flex items-center gap-1"
-                >
-                  <Camera className="w-3 h-3" /> Change Photo
-                </button>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg shadow-2xs transition-colors"
+                    >
+                      <Upload className="w-3 h-3 text-blue-600" /> Upload File
+                    </button>
+                    {formData.avatar !== DEFAULT_PHOTO && (
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        title="Remove custom photo"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400">PNG, JPG up to 5MB</span>
+                </div>
               )}
             </div>
 

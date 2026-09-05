@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Eye, Trash2, CalendarCheck, Check, DollarSign } from 'lucide-react';
-import { getTimeOffTypes, deleteTimeOffType } from '../../data/timeOffTypes';
+import { getTimeOffTypes, deleteTimeOffType, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -24,6 +24,9 @@ export const TimeOffTypes = () => {
 
   const loadData = () => {
     setTypes(getTimeOffTypes());
+    fetchTimeOffTypesAsync().then((list) => {
+      if (list && list.length > 0) setTypes(list);
+    }).catch(console.error);
   };
 
   useEffect(() => {
@@ -37,9 +40,9 @@ export const TimeOffTypes = () => {
     });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteModal.item) return;
-    deleteTimeOffType(deleteModal.item.id);
+    await deleteTimeOffType(deleteModal.item.id);
     setToastMessage(`Time off type "${deleteModal.item.name}" removed.`);
     loadData();
     setTimeout(() => setToastMessage(''), 3500);

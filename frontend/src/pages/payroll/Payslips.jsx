@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText, Eye, Printer, Search, Filter } from 'lucide-react';
-import { getPayslips } from '../../data/payslips';
-import { getPayruns } from '../../data/payruns';
-import { getEmployees } from '../../data/employees';
+import { getPayslips, fetchPayslipsAsync } from '../../data/payslips';
+import { getPayruns, fetchPayrunsAsync } from '../../data/payruns';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -38,6 +38,18 @@ export const Payslips = () => {
     setPayslips(getPayslips());
     setPayruns(getPayruns());
     setEmployees(getEmployees());
+
+    fetchPayslipsAsync().then((slips) => {
+      if (slips && slips.length > 0) setPayslips(slips);
+    }).catch(console.error);
+
+    fetchPayrunsAsync().then((runs) => {
+      if (runs && runs.length > 0) setPayruns(runs);
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((emps) => {
+      if (emps && emps.length > 0) setEmployees(emps);
+    }).catch(console.error);
   }, []);
 
   const getStatusBadge = (status) => {

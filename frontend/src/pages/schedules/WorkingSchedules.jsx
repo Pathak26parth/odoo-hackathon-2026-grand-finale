@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Eye, Trash2, Calendar, Users, Clock } from 'lucide-react';
-import { getSchedules, deleteSchedule } from '../../data/schedules';
+import { getSchedules, deleteSchedule, fetchSchedulesAsync } from '../../data/schedules';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { DataTable } from '../../components/common/DataTable';
@@ -15,15 +15,18 @@ export const WorkingSchedules = () => {
 
   const loadData = () => {
     setSchedules(getSchedules());
+    fetchSchedulesAsync().then((list) => {
+      if (list && list.length > 0) setSchedules(list);
+    }).catch(console.error);
   };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const handleDelete = (id, name) => {
+  const handleDelete = async (id, name) => {
     if (window.confirm(`Are you sure you want to delete working schedule "${name}"?`)) {
-      deleteSchedule(id);
+      await deleteSchedule(id);
       setToastMessage(`Schedule "${name}" deleted.`);
       setTimeout(() => setToastMessage(''), 3000);
       loadData();

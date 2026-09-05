@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, CreditCard } from 'lucide-react';
-import { getPayruns, deletePayrun } from '../../data/payruns';
-import { getSalaryStructures } from '../../data/salaryStructures';
+import { getPayruns, deletePayrun, fetchPayrunsAsync } from '../../data/payruns';
+import { getSalaryStructures, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
 import { useAuth } from '../../context/AuthContext';
 import { canCreate, canDelete, MODULES } from '../../utils/permissionUtils';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -26,11 +26,19 @@ export const Payruns = () => {
   useEffect(() => {
     setPayruns(getPayruns());
     setStructures(getSalaryStructures());
+
+    fetchPayrunsAsync().then((list) => {
+      if (list && list.length > 0) setPayruns(list);
+    }).catch(console.error);
+
+    fetchSalaryStructuresAsync().then((list) => {
+      if (list && list.length > 0) setStructures(list);
+    }).catch(console.error);
   }, []);
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this draft payrun?')) {
-      deletePayrun(id);
+      await deletePayrun(id);
       setPayruns(getPayruns());
     }
   };

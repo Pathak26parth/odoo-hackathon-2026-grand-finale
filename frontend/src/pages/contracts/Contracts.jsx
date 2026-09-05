@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, FileText, Search, Filter, Eye, DollarSign } from 'lucide-react';
-import { getContracts } from '../../data/contracts';
-import { getEmployees } from '../../data/employees';
+import { getContracts, fetchContractsAsync } from '../../data/contracts';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -25,6 +25,14 @@ export const Contracts = () => {
   useEffect(() => {
     setContracts(getContracts());
     setEmployees(getEmployees());
+
+    fetchContractsAsync().then((list) => {
+      if (list && list.length > 0) setContracts(list);
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((list) => {
+      if (list && list.length > 0) setEmployees(list);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {

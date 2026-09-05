@@ -1,55 +1,17 @@
+import userService, { normalizeUser } from '../services/userService';
+
 const STORAGE_KEY = 'peoplepay360_users_data';
 
 export const INITIAL_USERS = [
   {
-    id: 'usr-1',
+    id: '1',
     name: 'Admin User',
     email: 'admin@peoplepay360.com',
     role: 'Admin',
     status: 'Active',
-    employeeId: 'emp-1',
-    employeeName: 'Amelia Johnson',
+    employeeId: 'EMP001',
+    employeeName: 'Admin User',
     createdAt: '2026-01-10'
-  },
-  {
-    id: 'usr-2',
-    name: 'Emma Wilson',
-    email: 'emma@peoplepay360.com',
-    role: 'HR Manager',
-    status: 'Active',
-    employeeId: 'emp-2',
-    employeeName: 'Ethan Williams',
-    createdAt: '2026-02-14'
-  },
-  {
-    id: 'usr-3',
-    name: 'Liam Brown',
-    email: 'liam@peoplepay360.com',
-    role: 'HR Payroll User',
-    status: 'Active',
-    employeeId: 'emp-3',
-    employeeName: 'Olivia Martin',
-    createdAt: '2026-03-01'
-  },
-  {
-    id: 'usr-4',
-    name: 'Sophia Taylor',
-    email: 'sophia@peoplepay360.com',
-    role: 'Employee',
-    status: 'Active',
-    employeeId: 'emp-4',
-    employeeName: 'James Anderson',
-    createdAt: '2026-03-20'
-  },
-  {
-    id: 'usr-5',
-    name: 'Noah Smith',
-    email: 'noah@peoplepay360.com',
-    role: 'Employee',
-    status: 'Inactive',
-    employeeId: 'emp-1',
-    employeeName: 'Amelia Johnson',
-    createdAt: '2026-04-05'
   }
 ];
 
@@ -62,8 +24,20 @@ export const getUsers = () => {
   } catch (err) {
     console.error('Error reading users from localStorage:', err);
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_USERS));
   return INITIAL_USERS;
+};
+
+export const fetchUsersAsync = async () => {
+  try {
+    const data = await userService.getAllUsers();
+    if (data && data.length > 0) {
+      saveUsersToStorage(data);
+      return data;
+    }
+  } catch (err) {
+    console.warn('API fetchUsers failed, using cached data:', err.message);
+  }
+  return getUsers();
 };
 
 export const saveUsersToStorage = (users) => {
@@ -76,34 +50,71 @@ export const saveUsersToStorage = (users) => {
 
 export const getUserById = (id) => {
   const users = getUsers();
-  return users.find((u) => u.id === id) || null;
+  return users.find((u) => String(u.id) === String(id)) || null;
 };
 
-export const createUser = (userData) => {
-  const users = getUsers();
-  const newUser = {
-    id: `usr-${Date.now()}`,
-    ...userData,
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-  const updated = [newUser, ...users];
-  saveUsersToStorage(updated);
-  return newUser;
+export const fetchUserByIdAsync = async (id) => {
+  try {
+    const user = await userService.getUserById(id);
+    return user;
+  } catch (err) {
+    console.warn('API fetchUserById failed, using cached user:', err.message);
+    return getUserById(id);
+  }
 };
 
-export const updateUser = (id, userData) => {
-  const users = getUsers();
-  const index = users.findIndex((u) => u.id === id);
-  if (index === -1) return null;
-  const updatedUser = { ...users[index], ...userData };
-  users[index] = updatedUser;
-  saveUsersToStorage(users);
-  return updatedUser;
+export const createUser = async (userData) => {
+  try {
+    const result = await userService.createUser(userData);
+    const created = result.user ? normalizeUser(result.user) : { id: String(Date.now()), ...userData };
+    const users = getUsers();
+    saveUsersToStorage([created, ...users]);
+    return created;
+  } catch (err) {
+    console.warn('API createUser failed, falling back to local storage:', err.message);
+    const users = getUsers();
+    const newUser = {
+      id: String(Date.now()),
+      ...userData,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    const updated = [newUser, ...users];
+    saveUsersToStorage(updated);
+    return newUser;
+  }
 };
 
-export const deleteUser = (id) => {
+export const updateUser = async (id, userData) => {
+  try {
+    const result = await userService.updateUser(id, userData);
+    const updatedUser = result.user ? normalizeUser(result.user) : { ...userData, id: String(id) };
+    const users = getUsers();
+    const index = users.findIndex((u) => String(u.id) === String(id));
+    if (index !== -1) {
+      users[index] = { ...users[index], ...updatedUser };
+      saveUsersToStorage(users);
+    }
+    return updatedUser;
+  } catch (err) {
+    console.warn('API updateUser failed, updating local storage:', err.message);
+    const users = getUsers();
+    const index = users.findIndex((u) => String(u.id) === String(id));
+    if (index === -1) return null;
+    const updatedUser = { ...users[index], ...userData };
+    users[index] = updatedUser;
+    saveUsersToStorage(users);
+    return updatedUser;
+  }
+};
+
+export const deleteUser = async (id) => {
+  try {
+    await userService.deleteUser(id);
+  } catch (err) {
+    console.warn('API deleteUser failed, deleting from local storage:', err.message);
+  }
   const users = getUsers();
-  const updated = users.filter((u) => u.id !== id);
+  const updated = users.filter((u) => String(u.id) !== String(id));
   saveUsersToStorage(updated);
   return true;
 };
