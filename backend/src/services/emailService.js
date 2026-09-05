@@ -227,10 +227,73 @@ async function sendEmployeeEmailUpdated({ name, oldEmail, newEmail, employeeCode
   });
 }
 
+/**
+ * Send Employee Termination / Employment Relieved Notice Email
+ */
+async function sendEmployeeTerminationEmail({ name, email, employeeCode, jobPosition, departmentName }) {
+  const portalUrl = env.FRONTEND_URL;
+  const effectiveDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const subject = `PeoplePay360 — Official Notice of Employment Termination (Employee ID: ${employeeCode || '—'})`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;">
+      <div style="background: #1e293b; padding: 18px; border-radius: 6px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: bold;">PeoplePay360</h1>
+        <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 13px;">HR & Payroll Operations Platform</p>
+      </div>
+
+      <div style="padding: 24px 0;">
+        <h2 style="color: #0f172a; font-size: 18px; margin-bottom: 8px;">Dear ${name},</h2>
+        <p style="color: #334155; line-height: 1.6; margin-top: 0;">
+          This email serves as official notification that your employment / service with the organization has been <strong>terminated</strong>, effective immediately.
+        </p>
+
+        <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 18px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #9f1239; border-bottom: 1px solid #ffe4e6; padding-bottom: 6px;">Termination Record Details</h3>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Employee Name:</strong> ${name}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Employee ID:</strong> ${employeeCode || '—'}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Job Position:</strong> ${jobPosition || 'Employee'}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Department:</strong> ${departmentName || 'General'}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Effective Date:</strong> ${effectiveDate}</p>
+          <p style="margin: 0; font-size: 14px; color: #475569;"><strong>Employment Status:</strong> <span style="background: #ffe4e6; color: #be123c; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;">TERMINATED / RELIEVED</span></p>
+        </div>
+
+        <p style="color: #334155; line-height: 1.6;">
+          Your portal access and employee account credentials have been deactivated in accordance with company policy.
+        </p>
+
+        <p style="color: #334155; line-height: 1.6;">
+          Please coordinate with the Human Resources and Payroll departments regarding exit clearance, return of company assets, and processing of your final settlement and benefits.
+        </p>
+
+        <p style="color: #64748b; font-size: 12px; margin-top: 24px; line-height: 1.5;">
+          If you have any questions regarding your exit clearance or final settlement, please contact the HR department.
+        </p>
+      </div>
+
+      <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; color: #94a3b8; font-size: 12px;">
+        &copy; ${new Date().getFullYear()} PeoplePay360 HR & Payroll Operations. All rights reserved.
+      </div>
+    </div>
+  `;
+
+  return sendMail({
+    to: email,
+    subject,
+    html,
+    text: `Dear ${name},\n\nThis is an official notice that your employment has been terminated effective ${effectiveDate}.\nEmployee ID: ${employeeCode}\nPosition: ${jobPosition}\n\nYour portal access has been deactivated. Please contact HR for exit clearance and final settlement.\n\nPeoplePay360 HR Operations`
+  });
+}
+
 module.exports = {
   sendMail,
   sendEmployeeInvitation,
   sendEmployeeEmailUpdated,
+  sendEmployeeTerminationEmail,
   sendPasswordResetEmail,
   sendPayslipEmail
 };
