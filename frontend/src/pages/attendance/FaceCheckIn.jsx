@@ -1,5 +1,5 @@
-// pages/attendance/FaceCheckIn.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { NavLink } from 'react-router-dom';
 import { CameraPreview } from '../../components/faceRecognition/CameraPreview';
 import { FaceDetectionFrame } from '../../components/faceRecognition/FaceDetectionFrame';
 import { FaceVerificationStatus } from '../../components/faceRecognition/FaceVerificationStatus';
@@ -61,9 +61,62 @@ export const FaceCheckIn = () => {
   const [failureMessage, setFailureMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
-  const [todayRecordState, setTodayRecordState] = useState(null);
   const [hasCheckedInTodayState, setHasCheckedInTodayState] = useState(false);
+  const [todayRecordState, setTodayRecordState] = useState(null);
   const [verifiedFrame, setVerifiedFrame] = useState(null);
+  const [liveStatus, setLiveStatus] = useState(null);
+  const [recentPunches, setRecentPunches] = useState([]);
+
+  // Fetch live attendance status and recent punch history
+  const refreshLiveStatus = async () => {
+    try {
+      const statusData = await attendanceService.getMyAttendanceStatus();
+      if (statusData) {
+        setLiveStatus(statusData);
+        if (statusData.sessionStatus === 'CHECKED_IN') {
+          setHasCheckedInTodayState(true);
+        } else {
+          setHasCheckedInTodayState(false);
+        }
+        if (statusData.todayRecord) {
+          setTodayRecordState(statusData.todayRecord);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load live attendance status:', err.message);
+    }
+  };
+
+  const refreshRecentHistory = async () => {
+    try {
+      const historyData = await attendanceService.getMyAttendanceHistory({ limit: 5 });
+      if (historyData?.records) {
+        setRecentPunches(historyData.records);
+      }
+    } catch (err) {
+      console.warn('Could not load recent history:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    refreshLiveStatus();
+    refreshRecentHistory();
+  }, [currentUser]);
+
+  // Live timer tick for elapsed working time if checked in
+  useEffect(() => {
+    if (liveStatus?.sessionStatus === 'CHECKED_IN' && liveStatus?.todayRecord?.rawCheckIn) {
+      const timer = setInterval(() => {
+        const checkInDate = new Date(liveStatus.todayRecord.rawCheckIn);
+        const diffMs = Math.max(0, new Date().getTime() - checkInDate.getTime());
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        setLiveStatus((prev) => prev ? { ...prev, elapsedFormatted: `${hours}h ${mins}m` } : prev);
+      }, 30000);
+      return () => clearInterval(timer);
+    }
+  }, [liveStatus?.sessionStatus, liveStatus?.todayRecord?.rawCheckIn]);
 
   // Load employees from backend
   useEffect(() => {
@@ -233,6 +286,9 @@ export const FaceCheckIn = () => {
       await logFaceAttendanceEvent(verifiedData, 'Check In');
 
       setHasCheckedInTodayState(true);
+      await refreshLiveStatus();
+      await refreshRecentHistory();
+
       setSuccessToast({
         title: `✓ Check-in Successful for ${verifiedData.employeeName}`,
         time: formattedDisplayTime,
@@ -273,6 +329,9 @@ export const FaceCheckIn = () => {
       await logFaceAttendanceEvent(verifiedData, 'Check Out');
 
       setHasCheckedInTodayState(false);
+      await refreshLiveStatus();
+      await refreshRecentHistory();
+
       setSuccessToast({
         title: `✓ Check-out Successful for ${verifiedData.employeeName}`,
         time: formattedDisplayTime,
@@ -425,6 +484,62 @@ export const FaceCheckIn = () => {
         </div>
       )}
 
+      {/* Live Shift Status & Working Schedule Widget */}
+      {liveStatus && (
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base shadow-2xs shrink-0 ${
+                liveStatus.sessionStatus === 'CHECKED_IN'
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                  : liveStatus.sessionStatus === 'CHECKED_OUT'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                  : 'bg-slate-50 text-slate-500 border border-slate-200'
+              }`}>
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    liveStatus.sessionStatus === 'CHECKED_IN'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : liveStatus.sessionStatus === 'CHECKED_OUT'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {liveStatus.sessionStatus === 'CHECKED_IN' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                    {liveStatus.sessionStatus === 'CHECKED_IN' ? 'Currently Working' : liveStatus.sessionStatus === 'CHECKED_OUT' ? 'Shift Completed' : 'Not Checked In'}
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Shift: {liveStatus.schedule?.scheduledStart || '09:00'} – {liveStatus.schedule?.scheduledEnd || '18:00'} ({liveStatus.schedule?.expectedHours || 8}h)
+                  </span>
+                </div>
+                <div className="text-xs text-slate-600 mt-1">
+                  {liveStatus.sessionStatus === 'CHECKED_IN' ? (
+                    <span>
+                      Checked In today at <strong>{liveStatus.todayRecord?.checkIn || 'Earlier'}</strong> • Elapsed: <strong className="text-emerald-700 font-mono font-bold">{liveStatus.elapsedFormatted}</strong>
+                    </span>
+                  ) : liveStatus.sessionStatus === 'CHECKED_OUT' ? (
+                    <span>
+                      Checked in at <strong>{liveStatus.todayRecord?.checkIn}</strong> • Checked out at <strong>{liveStatus.todayRecord?.checkOut}</strong> • Total worked: <strong className="text-blue-700">{liveStatus.todayRecord?.workedHours}h</strong>
+                    </span>
+                  ) : (
+                    <span>Scheduled start time is <strong>{liveStatus.schedule?.scheduledStart || '09:00 AM'}</strong>. Please scan your face to record check-in.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Timeout indicator badge */}
+            <div className="flex sm:flex-col items-end justify-between text-right text-[11px]">
+              <span className="text-slate-400">Schedule Policy</span>
+              <span className="font-semibold text-slate-700">{liveStatus.schedule?.name || 'Standard 40 Hours'}</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">14h auto-timeout protection</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Kiosk Area */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
         <CameraPreview ref={cameraRef} isActive={true}>
@@ -444,6 +559,57 @@ export const FaceCheckIn = () => {
           onCancel={() => setDetectionState('Camera Ready')}
           isProcessing={isProcessing}
         />
+      </div>
+
+      {/* Recent Attendance Punches Widget */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-blue-600" />
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Recent Attendance Punches</h3>
+          </div>
+          <NavLink
+            to="/attendance"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
+          >
+            View Complete Attendance History →
+          </NavLink>
+        </div>
+
+        {recentPunches.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No attendance logs found for this period.</p>
+        ) : (
+          <div className="divide-y divide-slate-100 mt-2">
+            {recentPunches.map((punch) => (
+              <div key={punch.id} className="py-2.5 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="text-[11px] font-semibold text-slate-700 min-w-20">
+                    {punch.date}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">In: <strong className="text-slate-800">{punch.checkIn || '—'}</strong></span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-500">Out: <strong className="text-slate-800">{punch.checkOut || 'Active'}</strong></span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-500 font-medium">{punch.workedHours ? `${punch.workedHours} hrs` : '—'}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    punch.status === 'PRESENT'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : punch.status === 'LATE'
+                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                      : punch.status === 'HALF_DAY'
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                      : 'bg-slate-50 text-slate-600 border border-slate-200'
+                  }`}>
+                    {punch.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Privacy Notice Banner */}

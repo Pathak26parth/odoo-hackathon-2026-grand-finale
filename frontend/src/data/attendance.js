@@ -40,6 +40,24 @@ export const fetchAttendanceAsync = async (params = {}) => {
 
 export const fetchAttendanceRecordsAsync = fetchAttendanceAsync;
 
+export const fetchMyAttendanceStatusAsync = async () => {
+  try {
+    return await attendanceService.getMyAttendanceStatus();
+  } catch (err) {
+    console.warn('[Data Bridge] Could not fetch my attendance status:', err.message);
+    return null;
+  }
+};
+
+export const fetchMyAttendanceHistoryAsync = async (params = {}) => {
+  try {
+    return await attendanceService.getMyAttendanceHistory(params);
+  } catch (err) {
+    console.warn('[Data Bridge] Could not fetch my attendance history:', err.message);
+    return null;
+  }
+};
+
 export const getAttendanceById = (id) => {
   const list = getAttendanceRecords();
   return list.find((a) => String(a.id) === String(id)) || null;

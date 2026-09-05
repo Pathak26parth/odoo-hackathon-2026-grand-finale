@@ -111,6 +111,56 @@ export const attendanceService = {
     const query = employeeId ? `?employeeId=${employeeId}` : '';
     const res = await api.get(`/attendance/face/logs${query}`);
     return res.data || [];
+  },
+
+  // Employee Self-Service Attendance Endpoints
+  async getMyAttendanceStatus() {
+    const res = await api.get('/attendance/my-status');
+    return res.data?.data || res.data;
+  },
+
+  async getMyAttendanceHistory(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const res = await api.get(`/attendance/my-history?${query}`);
+    return res.data?.data || res.data;
+  },
+
+  // Attendance Regularization & Correction Requests
+  async createCorrectionRequest(data) {
+    const res = await api.post('/attendance/correction-requests', data);
+    return res.data?.data || res.data;
+  },
+
+  async getCorrectionRequests(params = {}) {
+    const cleanParams = {};
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null && value !== '' && value !== 'All') {
+        cleanParams[key] = value;
+      }
+    }
+    const query = new URLSearchParams(cleanParams).toString();
+    const res = await api.get(`/attendance/correction-requests${query ? `?${query}` : ''}`);
+    return res?.data || res;
+  },
+
+  async getCorrectionRequestById(id) {
+    const res = await api.get(`/attendance/correction-requests/${id}`);
+    return res.data?.data || res.data;
+  },
+
+  async approveCorrectionRequest(id, reviewerNotes = '') {
+    const res = await api.post(`/attendance/correction-requests/${id}/approve`, { reviewerNotes });
+    return res.data?.data || res.data;
+  },
+
+  async rejectCorrectionRequest(id, reviewerNotes = '') {
+    const res = await api.post(`/attendance/correction-requests/${id}/reject`, { reviewerNotes });
+    return res.data?.data || res.data;
+  },
+
+  async cancelCorrectionRequest(id) {
+    const res = await api.post(`/attendance/correction-requests/${id}/cancel`);
+    return res.data?.data || res.data;
   }
 };
 

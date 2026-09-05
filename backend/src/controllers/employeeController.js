@@ -2,7 +2,7 @@ const { query } = require('../config/db');
 const { sendSuccess, sendCreated, sendError, maskAccountNumber } = require('../utils/response');
 const authService = require('../services/authService');
 const cloudinaryService = require('../services/cloudinaryService');
-const { sendEmployeeEmailUpdated } = require('../services/emailService');
+const { sendEmployeeEmailUpdated, sendEmployeeTerminationEmail } = require('../services/emailService');
 
 /**
  * Employee Master Management Controller
@@ -236,9 +236,12 @@ class EmployeeController {
           console.error('[Employee Create] Cloudinary upload warning:', uploadErr.message);
         }
       }
-
       // Resolve effective role for user account creation
-      const chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      let chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      // Privilege Escalation Guard: Non-admin attempt to assign ADMIN role safely defaulted to EMPLOYEE
+      if (req.user?.role !== 'ADMIN' && (String(chosenRole).toUpperCase() === 'ADMIN' || String(chosenRole) === '1')) {
+        chosenRole = 'EMPLOYEE';
+      }
       const effectiveRole = chosenRole || 'EMPLOYEE';
 
       const result = await authService.createEmployeeWithAccount({
@@ -455,6 +458,10 @@ class EmployeeController {
       let resolvedRoleId = null;
       if (targetRole) {
         resolvedRoleId = await authService.resolveRoleId(targetRole);
+        // Security check: Only System Admin can assign or promote anyone to the ADMIN role
+        if (resolvedRoleId === 1 && req.user.role !== 'ADMIN') {
+          return sendError(res, 'Forbidden: Only a System Administrator can promote an account to the Admin role.', 403);
+        }
       }
 
       const userEmail = targetEmail || existing[0].email;
@@ -591,51 +598,102 @@ class EmployeeController {
     try {
       const { id } = req.params;
 
-      const existing = await query('SELECT * FROM employees WHERE id = ? OR employee_code = ?', [id, id]);
+      const existing = await query(`
+        SELECT e.*, d.name AS department_name 
+        FROM employees e
+        LEFT JOIN departments d ON e.department_id = d.id
+        WHERE e.id = ? OR e.employee_code = ?
+      `, [id, id]);
+
       if (existing.length === 0) {
         return sendError(res, 'Employee not found.', 404);
       }
-      const actualEmpId = existing[0].id;
+      const empRecord = existing[0];
+      const actualEmpId = empRecord.id;
 
       // Safety protection for primary Administrator
       if (actualEmpId === 1) {
         return sendError(res, 'Safety lock: System Administrator employee profile cannot be deleted.', 400);
       }
 
-      // Unlink manager references in departments and other employees
+      // 1. Unlink manager references in departments and other employees
       await query('UPDATE departments SET manager_id = NULL WHERE manager_id = ?', [actualEmpId]);
       await query('UPDATE employees SET manager_id = NULL WHERE manager_id = ?', [actualEmpId]);
 
-      // Delete linked user account and verification tokens
+      // 2. Unlink user references in audit/action fields
       const linkedUsers = await query('SELECT id FROM users WHERE employee_id = ?', [actualEmpId]);
-      for (const u of linkedUsers) {
-        await query('DELETE FROM email_verification_tokens WHERE user_id = ?', [u.id]);
-        await query('DELETE FROM password_reset_tokens WHERE user_id = ?', [u.id]);
-        await query('DELETE FROM audit_logs WHERE user_id = ?', [u.id]);
-        await query('DELETE FROM users WHERE id = ?', [u.id]);
+      const userIds = linkedUsers.map(u => u.id);
+
+      if (userIds.length > 0) {
+        for (const uid of userIds) {
+          await query('UPDATE attendance SET corrected_by = NULL WHERE corrected_by = ?', [uid]);
+          await query('UPDATE payruns SET created_by = NULL WHERE created_by = ?', [uid]);
+          await query('UPDATE payruns SET validated_by = NULL WHERE validated_by = ?', [uid]);
+          await query('UPDATE time_off_requests SET approved_by = NULL WHERE approved_by = ?', [uid]);
+
+          await query('DELETE FROM notifications WHERE user_id = ?', [uid]);
+          await query('DELETE FROM email_verification_tokens WHERE user_id = ?', [uid]);
+          await query('DELETE FROM password_reset_tokens WHERE user_id = ?', [uid]);
+          await query('DELETE FROM password_resets WHERE user_id = ?', [uid]);
+          await query('DELETE FROM refresh_tokens WHERE user_id = ?', [uid]);
+          await query('DELETE FROM audit_logs WHERE user_id = ?', [uid]);
+        }
       }
 
-      // Delete child records cleanly
+      // 3. Delete child records in correct foreign key dependency order
       await query('DELETE FROM employee_bank_details WHERE employee_id = ?', [actualEmpId]);
-      await query('DELETE FROM face_enrollments WHERE employee_id = ?', [actualEmpId]);
       await query('DELETE FROM face_verification_logs WHERE employee_id = ?', [actualEmpId]);
-      await query('DELETE FROM time_off_allocations WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM face_enrollments WHERE employee_id = ?', [actualEmpId]);
       await query('DELETE FROM time_off_requests WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM time_off_allocations WHERE employee_id = ?', [actualEmpId]);
       await query('DELETE FROM attendance WHERE employee_id = ?', [actualEmpId]);
-      await query('DELETE FROM contracts WHERE employee_id = ?', [actualEmpId]);
+      
+      // Delete payslip lines before payslips
+      await query('DELETE pl FROM payslip_lines pl JOIN payslips p ON pl.payslip_id = p.id WHERE p.employee_id = ?', [actualEmpId]);
       await query('DELETE FROM payslips WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM contracts WHERE employee_id = ?', [actualEmpId]);
 
-      // Delete employee record
+      // 4. Delete linked user records
+      for (const uid of userIds) {
+        await query('DELETE FROM users WHERE id = ?', [uid]);
+      }
+
+      // 5. Delete employee record
       await query('DELETE FROM employees WHERE id = ?', [actualEmpId]);
 
-      // Audit Log
-      await query(
-        `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
-         VALUES (?, 'EMPLOYEE_DELETED', 'Employees', ?, 'Admin deleted employee profile and linked records', ?, ?)`,
-        [req.user.id, String(actualEmpId), req.ip, req.headers['user-agent'] || '']
-      );
+      // 6. Send official termination notice email to the employee
+      if (empRecord.email) {
+        const empFullName = `${empRecord.first_name || ''} ${empRecord.last_name || ''}`.trim() || 'Employee';
+        sendEmployeeTerminationEmail({
+          email: empRecord.email,
+          name: empFullName,
+          employeeCode: empRecord.employee_code,
+          jobPosition: empRecord.job_position || 'Staff',
+          departmentName: empRecord.department_name || 'General',
+          effectiveDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        }).catch(err => {
+          console.warn('[Employee Controller] Could not send termination email:', err.message);
+        });
+      }
 
-      return sendSuccess(res, 'Employee deleted successfully.');
+      // 7. Audit Log
+      try {
+        await query(
+          `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
+           VALUES (?, 'EMPLOYEE_DELETED', 'Employees', ?, ?, ?, ?)`,
+          [
+            req.user?.id || 1,
+            String(actualEmpId),
+            `Deleted employee ${empRecord.first_name || ''} ${empRecord.last_name || ''} (${empRecord.employee_code || actualEmpId}) and sent termination notice`,
+            req.ip || '127.0.0.1',
+            req.headers?.['user-agent'] || (typeof req.get === 'function' ? req.get('user-agent') : '') || ''
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('[Employee Controller] Audit log failed during deletion:', auditErr.message);
+      }
+
+      return sendSuccess(res, 'Employee deleted successfully and termination notice dispatched.');
     } catch (error) {
       next(error);
     }

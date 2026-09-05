@@ -22,17 +22,19 @@ class TimeOffController {
     try {
       const { name, code, unit = 'DAYS', requiresAllocation = true, isPaid = true, maxDaysPerYear = 12 } = req.body;
 
-      if (!name || !code) {
-        return sendError(res, 'Name and code are required.', 400);
+      if (!name) {
+        return sendError(res, 'Name is required.', 400);
       }
+
+      const resolvedCode = (code || name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase().slice(0, 30)).toUpperCase();
 
       const result = await query(
         `INSERT INTO time_off_types (name, code, unit, requires_allocation, is_paid, max_days_per_year)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [name, code.toUpperCase().trim(), unit, requiresAllocation, isPaid, maxDaysPerYear]
+        [name, resolvedCode, unit, requiresAllocation, isPaid, maxDaysPerYear]
       );
 
-      return sendCreated(res, 'Time off type created', { id: result.insertId, name, code });
+      return sendCreated(res, 'Time off type created', { id: result.insertId, name, code: resolvedCode });
     } catch (error) {
       next(error);
     }
@@ -41,16 +43,16 @@ class TimeOffController {
   async updateType(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, unit, requiresAllocation, isPaid, maxDaysPerYear } = req.body;
+      const { name, code, unit, requiresAllocation, isPaid, maxDaysPerYear } = req.body;
 
       await query(
         `UPDATE time_off_types 
-         SET name = COALESCE(?, name), unit = COALESCE(?, unit), 
+         SET name = COALESCE(?, name), code = COALESCE(?, code), unit = COALESCE(?, unit), 
              requires_allocation = COALESCE(?, requires_allocation), 
              is_paid = COALESCE(?, is_paid), max_days_per_year = COALESCE(?, max_days_per_year),
              updated_at = NOW()
          WHERE id = ?`,
-        [name, unit, requiresAllocation, isPaid, maxDaysPerYear, id]
+        [name, code ? code.toUpperCase() : null, unit, requiresAllocation, isPaid, maxDaysPerYear, id]
       );
 
       return sendSuccess(res, 'Time off type updated successfully');
@@ -94,8 +96,9 @@ class TimeOffController {
       const params = [];
 
       if (employeeId) {
+        const resolvedEmpId = await timeOffService.resolveEmployeeId(employeeId) || employeeId;
         sql += ' AND a.employee_id = ?';
-        params.push(employeeId);
+        params.push(resolvedEmpId);
       }
       if (year) {
         sql += ' AND a.year = ?';
@@ -120,6 +123,7 @@ class TimeOffController {
         return sendError(res, 'Employee ID, Time Off Type ID, and allocatedDays are required.', 400);
       }
 
+      const resolvedEmpId = await timeOffService.resolveEmployeeId(employeeId) || employeeId;
       const vStart = validityStart || `${year}-01-01`;
       const vEnd = validityEnd || `${year}-12-31`;
 
@@ -131,7 +135,7 @@ class TimeOffController {
            remaining_days = VALUES(allocated_days) - taken_days,
            validity_start = VALUES(validity_start),
            validity_end = VALUES(validity_end);`,
-        [employeeId, timeOffTypeId, year, allocatedDays, allocatedDays, vStart, vEnd]
+        [resolvedEmpId, timeOffTypeId, year, allocatedDays, allocatedDays, vStart, vEnd]
       );
 
       return sendCreated(res, 'Leave allocation assigned successfully', { id: result.insertId });
@@ -170,8 +174,9 @@ class TimeOffController {
       const params = [];
 
       if (employeeId) {
+        const resolvedEmpId = await timeOffService.resolveEmployeeId(employeeId) || employeeId;
         sql += ' AND r.employee_id = ?';
-        params.push(employeeId);
+        params.push(resolvedEmpId);
       }
       if (status) {
         sql += ' AND r.status = ?';

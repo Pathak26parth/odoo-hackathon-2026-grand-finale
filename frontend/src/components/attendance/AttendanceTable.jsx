@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Edit2, Clock } from 'lucide-react';
+import { Eye, Edit2, Clock, FileEdit } from 'lucide-react';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
 import { DataTable } from '../common/DataTable';
 
@@ -11,8 +11,30 @@ export const AttendanceTable = ({
   onPageChange,
   onView,
   onEdit,
+  onRequestCorrection,
   canEdit = true
 }) => {
+  const formatTimeDisplay = (timeVal) => {
+    if (!timeVal) return null;
+    const str = String(timeVal).trim();
+    if (/am|pm/i.test(str)) {
+      return str.toUpperCase();
+    }
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+      const parts = str.split(':');
+      let h = parseInt(parts[0], 10);
+      const m = parts[1];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+    }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+    return str;
+  };
+
   const columns = [
     {
       header: 'Employee',
@@ -37,37 +59,46 @@ export const AttendanceTable = ({
     {
       header: 'Check In',
       key: 'checkIn',
-      render: (row) => (
-        <span className="font-mono text-slate-800 text-xs font-medium">
-          {row.checkIn ? `${row.checkIn} AM` : <span className="text-slate-400 italic">None</span>}
-        </span>
-      )
+      render: (row) => {
+        const timeStr = formatTimeDisplay(row.checkIn || row.check_in);
+        return (
+          <span className="font-mono text-slate-800 text-xs font-medium">
+            {timeStr || <span className="text-slate-400 italic">None</span>}
+          </span>
+        );
+      }
     },
     {
       header: 'Check Out',
       key: 'checkOut',
-      render: (row) => (
-        <span className="font-mono text-slate-800 text-xs font-medium">
-          {row.checkOut ? `${row.checkOut} PM` : <span className="text-rose-500 font-medium">Missing</span>}
-        </span>
-      )
+      render: (row) => {
+        const timeStr = formatTimeDisplay(row.checkOut || row.check_out);
+        return (
+          <span className="font-mono text-slate-800 text-xs font-medium">
+            {timeStr || <span className="text-rose-500 font-medium">Missing</span>}
+          </span>
+        );
+      }
     },
     {
       header: 'Worked Hours',
       key: 'workedHours',
-      render: (row) => (
-        <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900">
-          <Clock className="w-3.5 h-3.5 text-slate-400" />
-          <span>{row.workedHours || '0h 00m'}</span>
-        </div>
-      )
+      render: (row) => {
+        const hours = typeof row.workedHours === 'number' ? `${row.workedHours}h` : (row.workedHours || '0h 00m');
+        return (
+          <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <span>{hours}</span>
+          </div>
+        );
+      }
     },
     {
       header: 'Method',
       key: 'attendanceMethod',
       render: (row) => (
         <span className="text-xs font-medium text-slate-700">
-          {row.attendanceMethod || (row.isManualEdit ? 'Manual Entry' : 'Manual Entry')}
+          {row.attendanceMethod || (row.isManualCorrection || row.isManualEdit ? 'Manual Edit' : 'Portal Entry')}
         </span>
       )
     },
@@ -75,7 +106,7 @@ export const AttendanceTable = ({
       header: 'Verification',
       key: 'faceVerified',
       render: (row) => (
-        row.attendanceMethod === 'Face Recognition' || row.faceVerified ? (
+        row.attendanceMethod === 'Face Recognition' || row.verificationMethod === 'FACE' || row.faceVerified ? (
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
             Verified ✓
           </span>
@@ -97,7 +128,7 @@ export const AttendanceTable = ({
       key: 'actions',
       align: 'right',
       render: (row) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1.5">
           <button
             type="button"
             onClick={() => onView(row.id)}
@@ -106,7 +137,8 @@ export const AttendanceTable = ({
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
-          {canEdit && (
+
+          {canEdit ? (
             <button
               type="button"
               onClick={() => onEdit(row.id)}
@@ -114,6 +146,18 @@ export const AttendanceTable = ({
             >
               <Edit2 className="w-3 h-3" /> Edit
             </button>
+          ) : (
+            onRequestCorrection && (
+              <button
+                type="button"
+                onClick={() => onRequestCorrection(row)}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors"
+                title="Request Attendance Correction / Regularization from HR"
+              >
+                <FileEdit className="w-3 h-3 text-amber-600" />
+                <span>Regularize</span>
+              </button>
+            )
           )}
         </div>
       )
