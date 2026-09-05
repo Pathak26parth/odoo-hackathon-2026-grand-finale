@@ -176,7 +176,8 @@ class AuthService {
           name: displayName,
           email: cleanEmail,
           activationToken,
-          tempPassword: rawPassword
+          tempPassword: rawPassword,
+          roleName: roleDisplayName || roleName
         }).catch(err => console.error('[Invitation Email Error]:', err));
       }
 
@@ -359,7 +360,8 @@ class AuthService {
         name: `${employeeData.firstName} ${employeeData.lastName}`,
         email: employeeData.email,
         activationToken,
-        tempPassword
+        tempPassword,
+        roleName: roleName || 'EMPLOYEE'
       }).catch(err => console.error('[Invitation Email Error]:', err));
 
       return {

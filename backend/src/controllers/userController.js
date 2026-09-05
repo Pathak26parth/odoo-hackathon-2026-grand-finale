@@ -2,6 +2,7 @@ const { query, transaction } = require('../config/db');
 const { hashPassword } = require('../utils/password');
 const { sendSuccess, sendCreated, sendError } = require('../utils/response');
 const authService = require('../services/authService');
+const { sendEmployeeInvitation, sendEmployeeEmailUpdated } = require('../services/emailService');
 
 /**
  * User & Role Administration Controller
@@ -229,10 +230,27 @@ class UserController {
         return sendError(res, 'No fields provided to update.', 400);
       }
 
-      updateSql += updates.join(', ') + ', updated_at = NOW() WHERE id = ?';
-      params.push(id);
-
       await query(updateSql, params);
+
+      // If password was updated, notify user via email
+      if (password) {
+        const [uInfo] = await query(`
+          SELECT u.id, u.email, r.display_name as role_display,
+                 CONCAT(e.first_name, ' ', e.last_name) as full_name
+          FROM users u
+          JOIN roles r ON u.role_id = r.id
+          LEFT JOIN employees e ON u.employee_id = e.id
+          WHERE u.id = ?
+        `, [id]);
+        if (uInfo) {
+          sendEmployeeInvitation({
+            name: uInfo.full_name || uInfo.email.split('@')[0],
+            email: uInfo.email,
+            tempPassword: password,
+            roleName: uInfo.role_display
+          }).catch(e => console.error('[User Update Mail Error]:', e.message));
+        }
+      }
 
       // Audit Log
       await query(
@@ -242,6 +260,60 @@ class UserController {
       );
 
       return sendSuccess(res, 'User updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Reset and Send Temporary Password to User Email (Admin only)
+   * POST /api/users/:id/reset-password
+   */
+  async resetUserPassword(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userRows = await query(`
+        SELECT u.id, u.email, r.name as role_name, r.display_name as role_display_name,
+               CONCAT(e.first_name, ' ', e.last_name) as full_name
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        LEFT JOIN employees e ON u.employee_id = e.id
+        WHERE u.id = ?
+      `, [id]);
+
+      if (userRows.length === 0) {
+        return sendError(res, 'User not found.', 404);
+      }
+
+      const user = userRows[0];
+      const tempPassword = authService.generateSecurePassword(12);
+      const passwordHash = await hashPassword(tempPassword);
+
+      await query(
+        'UPDATE users SET password_hash = ?, must_change_password = TRUE, updated_at = NOW() WHERE id = ?',
+        [passwordHash, id]
+      );
+
+      // Send email with new password
+      await sendEmployeeInvitation({
+        name: user.full_name || user.email.split('@')[0],
+        email: user.email,
+        tempPassword,
+        roleName: user.role_display_name || user.role_name
+      });
+
+      // Audit Log
+      await query(
+        `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
+         VALUES (?, 'PASSWORD_RESET_ADMIN', 'Users', ?, 'Admin reset user password and sent credentials email', ?, ?)`,
+        [req.user.id, String(id), req.ip, req.headers['user-agent'] || '']
+      );
+
+      return sendSuccess(res, `New password generated and sent to ${user.email}.`, {
+        userId: user.id,
+        email: user.email,
+        tempPassword
+      });
     } catch (error) {
       next(error);
     }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2 } from 'lucide-react';
-import { getEmployeeById, createEmployee, updateEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
+import { getEmployeeById, createEmployee, updateEmployee, deleteEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { EmployeeSmartActions } from '../../components/employees/EmployeeSmartActions';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -29,6 +29,7 @@ export const EmployeeDetail = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -179,6 +180,25 @@ export const EmployeeDetail = () => {
     }
   };
 
+  const handleDeleteEmployee = async () => {
+    const empName = `${formData.firstName} ${formData.lastName}`.trim() || formData.employeeId || 'this employee';
+    if (!window.confirm(`Are you sure you want to delete ${empName} (${formData.employeeId})?\n\nThis will permanently delete the employee profile, associated user account, contracts, and attendance records.`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteEmployee(id);
+      setToastMessage('Employee deleted successfully.');
+      setTimeout(() => {
+        navigate('/employees');
+      }, 700);
+    } catch (err) {
+      alert('Error deleting employee: ' + err.message);
+      setDeleting(false);
+    }
+  };
+
   const departments = [
     'Engineering & Technology',
     'Engineering',
@@ -236,11 +256,24 @@ export const EmployeeDetail = () => {
             <button
               type="submit"
               form="employee-form"
-              disabled={submitting}
+              disabled={submitting || deleting}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
             >
               <Save className={`w-3.5 h-3.5 ${submitting ? 'animate-spin' : ''}`} />
               {submitting ? 'Uploading & Saving...' : isCreate ? 'Save Employee' : 'Update Employee'}
+            </button>
+          )}
+
+          {!isCreate && isHRorAdmin && (
+            <button
+              type="button"
+              onClick={handleDeleteEmployee}
+              disabled={deleting || submitting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-lg shadow-2xs transition-colors disabled:opacity-50"
+              title="Delete Employee"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {deleting ? 'Deleting...' : 'Delete Employee'}
             </button>
           )}
 
