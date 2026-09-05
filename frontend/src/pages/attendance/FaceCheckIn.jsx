@@ -97,30 +97,35 @@ export const FaceCheckIn = () => {
     const timeStr = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const formattedDisplayTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    // Create record in main attendance store
-    createAttendance({
-      employeeId: verifiedData.internalId || 'emp-1',
-      employeeName: verifiedData.employeeName,
-      department: verifiedData.department,
-      date: todayStr,
-      checkIn: timeStr,
-      checkOut: '',
-      status: 'Present',
-      attendanceMethod: 'Face Recognition',
-      faceVerified: true,
-      verificationConfidence: 98.7,
-      notes: 'Verified via Face Recognition kiosk.'
-    });
+    try {
+      // Create record in main attendance store
+      await createAttendance({
+        employeeId: verifiedData.internalId || 'emp-1',
+        employeeName: verifiedData.employeeName,
+        department: verifiedData.department,
+        date: todayStr,
+        checkIn: timeStr,
+        checkOut: '',
+        status: 'Present',
+        attendanceMethod: 'Face Recognition',
+        faceVerified: true,
+        verificationConfidence: 98.7,
+        notes: 'Verified via Face Recognition kiosk.'
+      });
 
-    // Add to face history
-    logFaceAttendanceEvent(verifiedData, 'Check In');
+      // Add to face history
+      await logFaceAttendanceEvent(verifiedData, 'Check In');
 
-    setIsProcessing(false);
-    setSuccessToast({
-      title: '✓ Check-in Successful',
-      time: formattedDisplayTime,
-      type: 'Check In'
-    });
+      setSuccessToast({
+        title: '✓ Check-in Successful',
+        time: formattedDisplayTime,
+        type: 'Check In'
+      });
+    } catch (err) {
+      alert('Error recording check in: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Handle Check Out
@@ -132,23 +137,28 @@ export const FaceCheckIn = () => {
     const formattedDisplayTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     const worked = calculateWorkedHours(todayRecord.checkIn, timeStr);
 
-    updateAttendance(todayRecord.id, {
-      checkOut: timeStr,
-      workedHours: worked.formatted,
-      status: 'Present',
-      notes: `${todayRecord.notes || ''} | Face check-out verified.`
-    });
+    try {
+      await updateAttendance(todayRecord.id, {
+        checkOut: timeStr,
+        workedHours: worked.formatted,
+        status: 'Present',
+        notes: `${todayRecord.notes || ''} | Face check-out verified.`
+      });
 
-    // Add to face history
-    logFaceAttendanceEvent(verifiedData, 'Check Out');
+      // Add to face history
+      await logFaceAttendanceEvent(verifiedData, 'Check Out');
 
-    setIsProcessing(false);
-    setSuccessToast({
-      title: '✓ Check-out Successful',
-      time: formattedDisplayTime,
-      workedHours: worked.formatted,
-      type: 'Check Out'
-    });
+      setSuccessToast({
+        title: '✓ Check-out Successful',
+        time: formattedDisplayTime,
+        workedHours: worked.formatted,
+        type: 'Check Out'
+      });
+    } catch (err) {
+      alert('Error recording check out: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
