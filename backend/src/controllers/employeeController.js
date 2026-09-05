@@ -338,7 +338,7 @@ class EmployeeController {
       } else if (department) {
         const deptStr = String(department).trim().toLowerCase();
         const depts = await query('SELECT id, name, code FROM departments');
-        const matched = depts.find(d => 
+        const matched = depts.find(d =>
           d.name.toLowerCase() === deptStr ||
           deptStr.includes(d.name.toLowerCase()) ||
           d.name.toLowerCase().includes(deptStr) ||
@@ -386,7 +386,7 @@ class EmployeeController {
       } else if (schedule) {
         const schedStr = String(schedule).trim().toLowerCase();
         const scheds = await query('SELECT id, name, type FROM working_schedules');
-        const matched = scheds.find(s => 
+        const matched = scheds.find(s =>
           s.name.toLowerCase() === schedStr ||
           schedStr.includes(s.name.toLowerCase()) ||
           s.name.toLowerCase().includes(schedStr)
