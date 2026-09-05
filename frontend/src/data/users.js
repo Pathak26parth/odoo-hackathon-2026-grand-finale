@@ -10,8 +10,7 @@ export const getUsers = () => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Clean out legacy mock data
-        return parsed.filter((u) => u && u.employeeId !== 'EMP001' && u.name !== 'Admin User');
+        return parsed;
       }
     }
   } catch (err) {
@@ -49,65 +48,36 @@ export const getUserById = (id) => {
 export const fetchUserByIdAsync = async (id) => {
   try {
     const user = await userService.getUserById(id);
-    return user;
+    if (user) {
+      const current = getUsers();
+      const idx = current.findIndex((u) => String(u.id) === String(id));
+      if (idx !== -1) current[idx] = user;
+      else current.push(user);
+      saveUsersToStorage(current);
+      return user;
+    }
   } catch (err) {
     console.warn('API fetchUserById failed, using cached user:', err.message);
-    return getUserById(id);
   }
+  return getUserById(id);
 };
 
 export const createUser = async (userData) => {
-  try {
-    const result = await userService.createUser(userData);
-    const created = result.user ? normalizeUser(result.user) : { id: String(Date.now()), ...userData };
-    const users = getUsers();
-    saveUsersToStorage([created, ...users]);
-    return created;
-  } catch (err) {
-    console.warn('API createUser failed, falling back to local storage:', err.message);
-    const users = getUsers();
-    const newUser = {
-      id: String(Date.now()),
-      ...userData,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    const updated = [newUser, ...users];
-    saveUsersToStorage(updated);
-    return newUser;
-  }
+  const result = await userService.createUser(userData);
+  await fetchUsersAsync();
+  return result?.user ? normalizeUser(result.user) : result;
 };
 
 export const updateUser = async (id, userData) => {
-  try {
-    const result = await userService.updateUser(id, userData);
-    const updatedUser = result.user ? normalizeUser(result.user) : { ...userData, id: String(id) };
-    const users = getUsers();
-    const index = users.findIndex((u) => String(u.id) === String(id));
-    if (index !== -1) {
-      users[index] = { ...users[index], ...updatedUser };
-      saveUsersToStorage(users);
-    }
-    return updatedUser;
-  } catch (err) {
-    console.warn('API updateUser failed, updating local storage:', err.message);
-    const users = getUsers();
-    const index = users.findIndex((u) => String(u.id) === String(id));
-    if (index === -1) return null;
-    const updatedUser = { ...users[index], ...userData };
-    users[index] = updatedUser;
-    saveUsersToStorage(users);
-    return updatedUser;
-  }
+  const result = await userService.updateUser(id, userData);
+  await fetchUsersAsync();
+  return result?.user ? normalizeUser(result.user) : result;
 };
 
 export const deleteUser = async (id) => {
-  try {
-    await userService.deleteUser(id);
-  } catch (err) {
-    console.warn('API deleteUser failed, deleting from local storage:', err.message);
-  }
-  const users = getUsers();
-  const updated = users.filter((u) => String(u.id) !== String(id));
-  saveUsersToStorage(updated);
-  return true;
+  const res = await userService.deleteUser(id);
+  const users = getUsers().filter((u) => String(u.id) !== String(id));
+  saveUsersToStorage(users);
+  await fetchUsersAsync();
+  return res;
 };

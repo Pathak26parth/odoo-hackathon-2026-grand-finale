@@ -1,7 +1,11 @@
+
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2, Shield } from 'lucide-react';
 import { getEmployeeById, createEmployee, updateEmployee, deleteEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
+import { employeeService } from '../../services/employeeService';
 import { PageHeader } from '../../components/common/PageHeader';
 import { EmployeeSmartActions } from '../../components/employees/EmployeeSmartActions';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -68,6 +72,7 @@ export const EmployeeDetail = () => {
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [departmentsList, setDepartmentsList] = useState([]);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -147,6 +152,12 @@ export const EmployeeDetail = () => {
   useEffect(() => {
     const list = getEmployees();
     setAllEmployees(list);
+
+    employeeService.getDepartments().then((depts) => {
+      if (Array.isArray(depts) && depts.length > 0) {
+        setDepartmentsList(depts.map((d) => d.name || d));
+      }
+    }).catch(console.error);
 
     fetchEmployeesAsync().then((fetchedList) => {
       if (Array.isArray(fetchedList)) setAllEmployees(fetchedList);
@@ -239,17 +250,11 @@ export const EmployeeDetail = () => {
     }
   };
 
-  const departments = [
+  const departments = departmentsList.length > 0 ? departmentsList : [
     'Engineering & Technology',
-    'Engineering',
     'Human Resources',
     'Finance & Payroll Operations',
-    'Finance',
-    'Marketing & Growth',
-    'Sales',
-    'Design & UX',
-    'Design',
-    'Operations'
+    'Marketing & Growth'
   ];
   const schedules = [
     'Standard Full-Time (40h/week)',
@@ -357,9 +362,8 @@ export const EmployeeDetail = () => {
             {/* Avatar block with file upload */}
             <div className="flex flex-col items-center gap-2.5 shrink-0">
               <div
-                className={`relative group rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm ${
-                  isEditing ? 'cursor-pointer hover:border-blue-500 transition-all' : ''
-                }`}
+                className={`relative group rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm ${isEditing ? 'cursor-pointer hover:border-blue-500 transition-all' : ''
+                  }`}
                 onClick={() => {
                   if (isEditing && fileInputRef.current) {
                     fileInputRef.current.click();
@@ -427,9 +431,8 @@ export const EmployeeDetail = () => {
                   value={formData.firstName}
                   onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                   placeholder="e.g. Amelia"
-                  className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${
-                    errors.firstName ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
-                  }`}
+                  className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${errors.firstName ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
+                    }`}
                 />
                 {errors.firstName && (
                   <p className="mt-1 text-[11px] text-rose-600">{errors.firstName}</p>
@@ -446,9 +449,8 @@ export const EmployeeDetail = () => {
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   placeholder="e.g. Johnson"
-                  className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${
-                    errors.lastName ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
-                  }`}
+                  className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${errors.lastName ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
+                    }`}
                 />
                 {errors.lastName && (
                   <p className="mt-1 text-[11px] text-rose-600">{errors.lastName}</p>
@@ -465,9 +467,8 @@ export const EmployeeDetail = () => {
                   value={formData.employeeId}
                   onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
                   placeholder="e.g. EMP-001"
-                  className={`w-full px-3 py-2 border rounded-lg font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${
-                    errors.employeeId ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
-                  }`}
+                  className={`w-full px-3 py-2 border rounded-lg font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${errors.employeeId ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
+                    }`}
                 />
                 {errors.employeeId && (
                   <p className="mt-1 text-[11px] text-rose-600">{errors.employeeId}</p>
@@ -484,9 +485,8 @@ export const EmployeeDetail = () => {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="e.g. amelia.j@peoplepay360.com"
-                  className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${
-                    errors.email ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
-                  }`}
+                  className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${errors.email ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
+                    }`}
                 />
                 {errors.email && (
                   <p className="mt-1 text-[11px] text-rose-600">{errors.email}</p>
@@ -544,9 +544,8 @@ export const EmployeeDetail = () => {
                 value={formData.position}
                 onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                 placeholder="e.g. Software Engineer"
-                className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${
-                  errors.position ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
-                }`}
+                className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${errors.position ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
+                  }`}
               />
               {errors.position && (
                 <p className="mt-1 text-[11px] text-rose-600">{errors.position}</p>
@@ -622,9 +621,8 @@ export const EmployeeDetail = () => {
                 ))}
               </select>
               <div className="mt-1.5 flex items-center gap-2">
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                  SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}>
+                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
+                  }`}>
                   Panel: {SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.panel}
                 </span>
                 <p className="text-[11px] text-slate-500">

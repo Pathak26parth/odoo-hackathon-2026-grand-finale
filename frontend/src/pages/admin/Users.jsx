@@ -25,11 +25,23 @@ export const Users = () => {
 
   // Filtered users list
   const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = roleFilter === 'All' || user.role === roleFilter;
-    const matchesStatus = statusFilter === 'All' || user.status === statusFilter;
+    const name = (user?.name || '').toLowerCase();
+    const email = (user?.email || '').toLowerCase();
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = name.includes(q) || email.includes(q);
+
+    const userRole = (user?.role || '').toLowerCase();
+    const filterRole = roleFilter.toLowerCase();
+    const matchesRole =
+      roleFilter === 'All' ||
+      userRole === filterRole ||
+      (filterRole.includes('payroll') && userRole.includes('payroll'));
+
+    const userStatus = (user?.status || '').toLowerCase();
+    const filterStatus = statusFilter.toLowerCase();
+    const matchesStatus =
+      statusFilter === 'All' || userStatus === filterStatus;
+
     return matchesSearch && matchesRole && matchesStatus;
   });
 
@@ -145,6 +157,7 @@ export const Users = () => {
               <option value="All">All Roles</option>
               <option value="Admin">Admin</option>
               <option value="HR Manager">HR Manager</option>
+              <option value="HR Payroll Admin">HR Payroll Admin</option>
               <option value="HR Payroll User">HR Payroll User</option>
               <option value="HR Payroll Manager">HR Payroll Manager</option>
               <option value="Employee">Employee</option>

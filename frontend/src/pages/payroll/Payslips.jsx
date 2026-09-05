@@ -53,14 +53,15 @@ export const Payslips = () => {
   }, []);
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Paid':
+    const s = (status || '').toUpperCase();
+    switch (s) {
+      case 'PAID':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'Validated':
+      case 'VALIDATED':
         return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Computed':
+      case 'COMPUTED':
         return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Draft':
+      case 'DRAFT':
       default:
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
@@ -68,16 +69,24 @@ export const Payslips = () => {
 
   const filtered = payslips.filter((slip) => {
     const matchesSearch =
-      slip.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      slip.slipNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      slip.department.toLowerCase().includes(searchTerm.toLowerCase());
+      slip.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      slip.slipNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      slip.department?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesPayrun = payrunFilter === 'All' || slip.payrunId === payrunFilter;
-    const matchesStatus = statusFilter === 'All' || slip.status === statusFilter;
-    const matchesEmployee = employeeFilter === 'All' || slip.employeeId === employeeFilter;
+    const matchesPayrun = payrunFilter === 'All' || String(slip.payrunId) === String(payrunFilter);
+    const matchesStatus = statusFilter === 'All' || slip.status?.toUpperCase() === statusFilter.toUpperCase();
+    const matchesEmployee =
+      employeeFilter === 'All' ||
+      String(slip.employeeId) === String(employeeFilter) ||
+      String(slip.internalEmployeeId) === String(employeeFilter);
 
     if (isEmployeeOnly && currentUser?.employeeId) {
-      return slip.employeeId === currentUser.employeeId && matchesSearch && matchesStatus;
+      return (
+        (String(slip.employeeId) === String(currentUser.employeeId) ||
+         String(slip.internalEmployeeId) === String(currentUser.employeeId)) &&
+        matchesSearch &&
+        matchesStatus
+      );
     }
 
     return matchesSearch && matchesPayrun && matchesStatus && matchesEmployee;

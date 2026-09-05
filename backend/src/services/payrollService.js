@@ -338,6 +338,135 @@ class PayrollService {
       };
     });
   }
+
+  /**
+   * Recompute an existing Payrun batch and recalculate its payslips
+   */
+  async recomputePayrun(payrunId, userId = null) {
+    const runRows = await query('SELECT * FROM payruns WHERE id = ?', [payrunId]);
+    if (runRows.length === 0) {
+      throw new Error('Payrun not found');
+    }
+
+    const payrun = runRows[0];
+    if (payrun.status === 'PAID') {
+      throw new Error('Cannot recompute a finalized PAID payrun.');
+    }
+
+    return transaction(async (connection) => {
+      // 1. Get current employee IDs in this payrun, or active employees with valid contracts
+      const [existingSlips] = await connection.execute(
+        'SELECT DISTINCT employee_id FROM payslips WHERE payrun_id = ?',
+        [payrunId]
+      );
+
+      let empIds = existingSlips.map((r) => r.employee_id);
+      if (empIds.length === 0) {
+        const [activeEmps] = await connection.execute(
+          "SELECT id FROM employees WHERE status = 'ACTIVE'"
+        );
+        empIds = activeEmps.map((r) => r.id);
+      }
+
+      // 2. Delete existing payslip_lines and payslips for this payrun
+      await connection.execute(
+        `DELETE pl FROM payslip_lines pl 
+         JOIN payslips p ON pl.payslip_id = p.id 
+         WHERE p.payrun_id = ?`,
+        [payrunId]
+      );
+      await connection.execute('DELETE FROM payslips WHERE payrun_id = ?', [payrunId]);
+
+      let totalGross = 0;
+      let totalDeductions = 0;
+      let totalNet = 0;
+      let count = 0;
+
+      // 3. Compute and insert each employee's payslip
+      for (const empId of empIds) {
+        const contract = await this.getApplicableContract(empId, payrun.period_start, payrun.period_end);
+        if (!contract) continue;
+
+        // Calculate worked days from attendance records during period
+        const [attRows] = await connection.execute(
+          `SELECT COUNT(*) AS present_days 
+           FROM attendance 
+           WHERE employee_id = ? AND date >= ? AND date <= ? AND status IN ('PRESENT', 'LATE')`,
+          [empId, payrun.period_start, payrun.period_end]
+        );
+        const workedDays = attRows.length > 0 && attRows[0].present_days > 0 ? attRows[0].present_days : 30;
+
+        const computation = await this.computeSalary({
+          contract,
+          structureId: payrun.salary_structure_id,
+          workedDays,
+          totalWorkingDays: 30
+        });
+
+        const payslipCode = `PS-${payrun.period_start.replace(/-/g, '').substring(0, 6)}-R${payrunId}-${empId.toString().padStart(3, '0')}`;
+
+        const [slipInsert] = await connection.execute(
+          `INSERT INTO payslips (payslip_code, payrun_id, employee_id, contract_id, salary_structure_id, period_start, period_end, worked_days, total_working_days, gross_amount, deduction_amount, net_amount, payment_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 30.00, ?, ?, ?, 'UNPAID')`,
+          [
+            payslipCode,
+            payrunId,
+            empId,
+            contract.id,
+            payrun.salary_structure_id,
+            payrun.period_start,
+            payrun.period_end,
+            workedDays,
+            computation.grossAmount,
+            computation.deductionAmount,
+            computation.netAmount
+          ]
+        );
+
+        const payslipId = slipInsert.insertId;
+
+        for (const line of computation.lines) {
+          await connection.execute(
+            `INSERT INTO payslip_lines (payslip_id, salary_rule_id, code, category, name, sequence, amount)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [payslipId, line.salaryRuleId, line.code, line.category, line.name, line.sequence, line.amount]
+          );
+        }
+
+        totalGross += computation.grossAmount;
+        totalDeductions += computation.deductionAmount;
+        totalNet += computation.netAmount;
+        count++;
+      }
+
+      // 4. Update Payrun totals and set to COMPUTED
+      await connection.execute(
+        `UPDATE payruns 
+         SET total_gross = ?, total_deductions = ?, total_net = ?, employee_count = ?, status = 'COMPUTED', updated_at = NOW()
+         WHERE id = ?`,
+        [totalGross, totalDeductions, totalNet, count, payrunId]
+      );
+
+      // 5. Audit Log
+      if (userId) {
+        await connection.execute(
+          `INSERT INTO audit_logs (user_id, action, module, record_id, description)
+           VALUES (?, 'PAYRUN_RECOMPUTED', 'Payruns', ?, ?)`,
+          [userId, String(payrunId), `Recomputed payrun ${payrun.run_code} for ${count} employees`]
+        );
+      }
+
+      return {
+        payrunId,
+        runCode: payrun.run_code,
+        status: STATUSES.PAYRUN.COMPUTED,
+        employeeCount: count,
+        totalGross: parseFloat(totalGross.toFixed(2)),
+        totalDeductions: parseFloat(totalDeductions.toFixed(2)),
+        totalNet: parseFloat(totalNet.toFixed(2))
+      };
+    });
+  }
 }
 
 module.exports = new PayrollService();

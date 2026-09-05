@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, FileText, Search, Filter, Eye, DollarSign } from 'lucide-react';
 import { getContracts, fetchContractsAsync } from '../../data/contracts';
 import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import employeeService from '../../services/employeeService';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -22,6 +23,8 @@ export const Contracts = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
+  const [departments, setDepartments] = useState([]);
+
   useEffect(() => {
     setContracts(getContracts());
     setEmployees(getEmployees());
@@ -32,6 +35,10 @@ export const Contracts = () => {
 
     fetchEmployeesAsync().then((list) => {
       if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+
+    employeeService.getDepartments().then((list) => {
+      if (Array.isArray(list)) setDepartments(list);
     }).catch(console.error);
   }, []);
 
@@ -46,10 +53,14 @@ export const Contracts = () => {
     const matchesSearch =
       c.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.contractCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.id?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = departmentFilter === 'All' || c.department === departmentFilter;
-    const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
-    const matchesEmp = selectedEmployeeId === 'All' || c.employeeId === selectedEmployeeId;
+    const matchesStatus = statusFilter === 'All' || c.status?.toUpperCase() === statusFilter.toUpperCase();
+    const matchesEmp =
+      selectedEmployeeId === 'All' ||
+      String(c.employeeId) === String(selectedEmployeeId) ||
+      String(c.internalEmployeeId) === String(selectedEmployeeId);
     return matchesSearch && matchesDept && matchesStatus && matchesEmp;
   });
 
@@ -57,8 +68,6 @@ export const Contracts = () => {
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
-
-  const departments = ['All', 'Engineering', 'Human Resources', 'Finance', 'Sales', 'Design'];
 
   const columns = [
     {
@@ -232,11 +241,17 @@ export const Contracts = () => {
               }}
               className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
-              {departments.map((d) => (
-                <option key={d} value={d}>
-                  {d === 'All' ? 'All Departments' : d}
-                </option>
-              ))}
+              <option value="All">All Departments</option>
+              {departments.map((d) => {
+                const name = typeof d === 'object' ? d.name : d;
+                const id = typeof d === 'object' ? d.id : d;
+                if (name === 'All') return null;
+                return (
+                  <option key={id} value={name}>
+                    {name}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

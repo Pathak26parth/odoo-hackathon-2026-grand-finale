@@ -168,6 +168,20 @@ class PayrunController {
   }
 
   /**
+   * Recompute Payrun Batch
+   * POST /api/payruns/:id/compute
+   */
+  async computePayrun(req, res, next) {
+    try {
+      const { id } = req.params;
+      const result = await payrollService.recomputePayrun(id, req.user?.id);
+      return sendSuccess(res, 'Payrun recomputed successfully.', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Validate Payrun (Locks calculations)
    * POST /api/payruns/:id/validate
    */

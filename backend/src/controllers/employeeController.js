@@ -746,6 +746,19 @@ class EmployeeController {
       next(error);
     }
   }
+
+  /**
+   * Get all departments
+   * GET /api/employees/departments
+   */
+  async getDepartments(req, res, next) {
+    try {
+      const departments = await query('SELECT id, name, code, manager_id FROM departments ORDER BY name ASC');
+      return sendSuccess(res, 'Departments retrieved successfully', departments);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new EmployeeController();

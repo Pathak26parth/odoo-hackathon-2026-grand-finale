@@ -1,6 +1,7 @@
 // components/payroll/SendPayslipsModal.jsx
 import React, { useState } from 'react';
 import { Mail, CheckCircle2, AlertCircle, Loader2, X, Send } from 'lucide-react';
+import payrollService from '../../services/payrollService';
 import { updatePayslip } from '../../data/payslips';
 
 export const SendPayslipsModal = ({ isOpen, onClose, payrun, payslips = [], onFinished }) => {
@@ -50,30 +51,24 @@ export const SendPayslipsModal = ({ isOpen, onClose, payrun, payslips = [], onFi
 
     for (const id of selectedIds) {
       const slip = payslips.find((s) => s.id === id);
-      await new Promise((r) => setTimeout(r, 250));
-
-      // Check if employee has an email address
-      const empEmail = slip?.employeeEmail || slip?.email;
-      const isFailed = !empEmail && (!slip?.employeeName || slip.employeeName.trim() === '');
-      const status = isFailed ? 'Failed' : 'Sent';
-      workingStatuses[id] = status;
-      setDeliveryStatuses({ ...workingStatuses });
-
-      updatePayslip(id, { emailStatus: status });
-
-      if (isFailed) {
-        failedCount++;
-      } else {
+      try {
+        await payrollService.sendPayslipEmail(id);
+        workingStatuses[id] = 'Sent';
         sentCount++;
+      } catch (err) {
+        console.warn(`Failed to send payslip ${id}:`, err);
+        workingStatuses[id] = 'Failed';
+        failedCount++;
       }
+      setDeliveryStatuses({ ...workingStatuses });
     }
 
     setIsSending(false);
     setSummaryReport({
       sentCount,
       failedCount,
-      message: `${sentCount} Payslips sent successfully. ${
-        failedCount > 0 ? `${failedCount} Payslip failed because employee email/bank delivery is missing.` : ''
+      message: `${sentCount} Payslip email(s) dispatched successfully. ${
+        failedCount > 0 ? `${failedCount} Payslip email(s) failed.` : ''
       }`
     });
 

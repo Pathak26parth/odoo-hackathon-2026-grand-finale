@@ -144,17 +144,31 @@ export const ContractForm = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setSubmitting(true);
     try {
+      const matchedStruct = availableStructures.find(
+        (s) => s.name === formData.salaryStructure || String(s.id) === String(formData.salaryStructure)
+      );
+      const matchedEmp = employees.find(
+        (emp) => String(emp.id) === String(formData.employeeId) || emp.employeeId === formData.employeeId
+      );
+
+      const payload = {
+        ...formData,
+        internalEmployeeId: matchedEmp ? matchedEmp.id : formData.employeeId,
+        salaryStructureId: matchedStruct ? matchedStruct.id : 1,
+        departmentId: matchedEmp ? matchedEmp.departmentId : null
+      };
+
       if (isCreate) {
-        createContract(formData);
+        await createContract(payload);
         setToastMessage('Contract created successfully!');
       } else {
-        updateContract(id, formData);
+        await updateContract(id, payload);
         setToastMessage('Contract updated successfully!');
       }
 
@@ -162,7 +176,7 @@ export const ContractForm = () => {
         navigate('/contracts');
       }, 900);
     } catch (err) {
-      alert('Error saving contract: ' + err.message);
+      alert('Error saving contract: ' + (err.message || 'Server error occurred'));
       setSubmitting(false);
     }
   };

@@ -37,18 +37,21 @@ export const Payruns = () => {
   }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this draft payrun?')) {
+    if (window.confirm('Are you sure you want to delete this payrun batch?')) {
       await deletePayrun(id);
-      setPayruns(getPayruns());
+      const list = await fetchPayrunsAsync();
+      if (Array.isArray(list)) setPayruns(list);
     }
   };
 
   const filtered = payruns.filter((p) => {
+    const structName = p.structure || p.salaryStructureName || p.structure_name || '';
     const matchesSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.salaryStructureName?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStructure = structureFilter === 'All' || p.salaryStructureName === structureFilter;
-    const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
+      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.runCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      structName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStructure = structureFilter === 'All' || structName === structureFilter;
+    const matchesStatus = statusFilter === 'All' || p.status?.toUpperCase() === statusFilter.toUpperCase();
     return matchesSearch && matchesStructure && matchesStatus;
   });
 

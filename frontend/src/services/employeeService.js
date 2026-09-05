@@ -47,6 +47,11 @@ export function normalizeEmployee(emp) {
 }
 
 export const employeeService = {
+  async getDepartments() {
+    const res = await api.get('/employees/departments');
+    return res.data || [];
+  },
+
   async getAllEmployees(params = {}) {
     const query = new URLSearchParams();
     if (params.search) query.append('search', params.search);

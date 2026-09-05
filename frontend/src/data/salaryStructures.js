@@ -43,46 +43,42 @@ export const getSalaryStructureById = (id) => {
   return list.find((s) => String(s.id) === String(id)) || null;
 };
 
-export const createSalaryStructure = async (data) => {
+export const fetchSalaryStructureByIdAsync = async (id) => {
   try {
-    const res = await payrollService.createSalaryStructure(data);
-    await fetchSalaryStructuresAsync();
-    return res;
+    const struct = await payrollService.getSalaryStructureById(id);
+    if (struct) {
+      const currentList = getSalaryStructures();
+      const idx = currentList.findIndex((s) => String(s.id) === String(id));
+      if (idx !== -1) {
+        currentList[idx] = struct;
+      } else {
+        currentList.push(struct);
+      }
+      saveSalaryStructuresToStorage(currentList);
+      return struct;
+    }
   } catch (err) {
-    console.warn('Backend create salary structure fallback:', err.message);
-    const list = getSalaryStructures();
-    const newStruct = { id: String(Date.now()), ...data };
-    saveSalaryStructuresToStorage([newStruct, ...list]);
-    return newStruct;
+    console.warn('[Data Bridge] getSalaryStructureById failed:', err.message);
   }
+  return getSalaryStructureById(id);
+};
+
+export const createSalaryStructure = async (data) => {
+  const res = await payrollService.createSalaryStructure(data);
+  await fetchSalaryStructuresAsync();
+  return res;
 };
 
 export const updateSalaryStructure = async (id, data) => {
-  try {
-    const res = await payrollService.updateSalaryStructure(id, data);
-    await fetchSalaryStructuresAsync();
-    return res;
-  } catch (err) {
-    console.warn('Backend update salary structure fallback:', err.message);
-    const list = getSalaryStructures();
-    const idx = list.findIndex((s) => String(s.id) === String(id));
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], ...data };
-      saveSalaryStructuresToStorage(list);
-    }
-    return data;
-  }
+  const res = await payrollService.updateSalaryStructure(id, data);
+  await fetchSalaryStructuresAsync();
+  return res;
 };
 
 export const deleteSalaryStructure = async (id) => {
-  try {
-    const res = await payrollService.deleteSalaryStructure(id);
-    await fetchSalaryStructuresAsync();
-    return res;
-  } catch (err) {
-    console.error('Delete salary structure failed on backend:', err.message);
-    const list = getSalaryStructures().filter((s) => String(s.id) !== String(id));
-    saveSalaryStructuresToStorage(list);
-    return true;
-  }
+  const res = await payrollService.deleteSalaryStructure(id);
+  const list = getSalaryStructures().filter((s) => String(s.id) !== String(id));
+  saveSalaryStructuresToStorage(list);
+  await fetchSalaryStructuresAsync();
+  return res;
 };

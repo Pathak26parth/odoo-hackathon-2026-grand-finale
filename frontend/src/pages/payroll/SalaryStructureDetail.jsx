@@ -7,6 +7,7 @@ import {
   updateSalaryStructure
 } from '../../data/salaryStructures';
 import { getSalaryRules } from '../../data/salaryRules';
+import payrollService from '../../services/payrollService';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SalaryStructureForm } from '../../components/payroll/SalaryStructureForm';
@@ -26,17 +27,25 @@ export const SalaryStructureDetail = () => {
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    setAvailableRules(getSalaryRules());
+    async function load() {
+      try {
+        const rules = await payrollService.getSalaryRules();
+        setAvailableRules(rules);
 
-    if (!isCreate) {
-      const existing = getSalaryStructureById(id);
-      if (existing) {
-        setStructure(existing);
-      } else {
-        alert('Salary Structure not found');
-        navigate('/payroll/salary-structures');
+        if (!isCreate) {
+          const existing = await payrollService.getSalaryStructureById(id);
+          if (existing) {
+            setStructure(existing);
+          } else {
+            alert('Salary Structure not found');
+            navigate('/payroll/salary-structures');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load salary structure details:', err);
       }
     }
+    load();
   }, [id, isCreate, navigate]);
 
   if (!hasAccess) {
@@ -53,13 +62,13 @@ export const SalaryStructureDetail = () => {
     );
   }
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
       if (isCreate) {
-        createSalaryStructure(data);
+        await createSalaryStructure(data);
         setToastMessage(`Salary structure "${data.name}" created!`);
       } else {
-        updateSalaryStructure(id, data);
+        await updateSalaryStructure(id, data);
         setToastMessage(`Salary structure "${data.name}" updated!`);
       }
 

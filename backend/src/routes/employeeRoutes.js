@@ -11,6 +11,7 @@ const { PERMISSIONS } = require('../constants/permissions');
 router.get('/me', requireAuth, (req, res, next) => employeeController.getMeEmployee(req, res, next));
 
 // Employee Master CRUD
+router.get('/departments', requireAuth, (req, res, next) => employeeController.getDepartments(req, res, next));
 router.get('/', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_READ), (req, res, next) => employeeController.getAllEmployees(req, res, next));
 router.get('/:id', requireAuth, requireSelfOrAdmin(req => req.params.id), (req, res, next) => employeeController.getEmployeeById(req, res, next));
 router.post('/', requireAuth, requirePermission(PERMISSIONS.EMPLOYEES_CREATE), validateCreateEmployee, (req, res, next) => employeeController.createEmployee(req, res, next));

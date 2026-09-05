@@ -12,6 +12,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { getEmployees, fetchEmployeesAsync, deleteEmployee } from '../../data/employees';
+import { employeeService } from '../../services/employeeService';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -33,11 +34,18 @@ export const Employees = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [departmentsList, setDepartmentsList] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
 
   useEffect(() => {
     setEmployees(getEmployees());
+    employeeService.getDepartments().then((depts) => {
+      if (Array.isArray(depts) && depts.length > 0) {
+        setDepartmentsList(depts.map((d) => d.name || d));
+      }
+    }).catch(console.error);
+
     fetchEmployeesAsync().then((list) => {
       if (Array.isArray(list)) setEmployees(list);
     }).catch(console.error);
@@ -92,7 +100,11 @@ export const Employees = () => {
     currentPage * pageSize
   );
 
-  const departments = ['All', ...new Set(employees.map((e) => e.department).filter(Boolean))];
+  const allDeptNames = [
+    ...departmentsList,
+    ...employees.map((e) => e.department).filter(Boolean)
+  ];
+  const departments = ['All', ...new Set(allDeptNames)];
 
   // Table columns for List View
   const columns = [

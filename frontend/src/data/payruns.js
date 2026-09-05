@@ -46,67 +46,69 @@ export const getPayrunById = (id) => {
 export const fetchPayrunByIdAsync = async (id) => {
   try {
     const res = await payrollService.getPayrunById(id);
-    return res;
-  } catch (err) {
-    return getPayrunById(id);
-  }
-};
-
-export const createPayrun = async (data) => {
-  try {
-    const res = await payrollService.createPayrun(data);
-    await fetchPayrunsAsync();
-    return res;
-  } catch (err) {
-    console.warn('Backend create payrun fallback:', err.message);
-    const list = getPayruns();
-    const newRun = {
-      id: String(Date.now()),
-      runCode: `PAYRUN-${Date.now()}`,
-      status: 'Draft',
-      totalBasic: 0,
-      totalGross: 0,
-      totalDeductions: 0,
-      totalNet: 0,
-      ...data
-    };
-    savePayrunsToStorage([newRun, ...list]);
-    return newRun;
-  }
-};
-
-export const updatePayrun = async (id, data) => {
-  try {
-    // If computing or validating or paying
-    if (data.status === 'COMPUTED' || data.status === 'Computed') {
-      await payrollService.computePayrun(id);
-    } else if (data.status === 'VALIDATED' || data.status === 'Validated') {
-      await payrollService.validatePayrun(id);
-    } else if (data.status === 'PAID' || data.status === 'Paid') {
-      await payrollService.payPayrun(id);
+    if (res) {
+      const currentList = getPayruns();
+      const idx = currentList.findIndex((p) => String(p.id) === String(id) || p.runCode === id);
+      if (idx !== -1) {
+        currentList[idx] = res;
+      } else {
+        currentList.push(res);
+      }
+      savePayrunsToStorage(currentList);
+      return res;
     }
-    await fetchPayrunsAsync();
   } catch (err) {
-    console.warn('Backend update payrun fallback:', err.message);
-    const list = getPayruns();
-    const idx = list.findIndex((p) => String(p.id) === String(id) || p.runCode === id);
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], ...data };
-      savePayrunsToStorage(list);
-    }
+    console.warn('[Data Bridge] getPayrunById failed:', err.message);
   }
   return getPayrunById(id);
 };
 
-export const deletePayrun = async (id) => {
-  try {
-    const res = await payrollService.deletePayrun(id);
-    await fetchPayrunsAsync();
-    return res;
-  } catch (err) {
-    console.error('Delete payrun failed on backend:', err.message);
-    const list = getPayruns().filter((p) => String(p.id) !== String(id) && p.runCode !== id);
-    savePayrunsToStorage(list);
-    return true;
+export const createPayrun = async (data) => {
+  const res = await payrollService.createPayrun(data);
+  await fetchPayrunsAsync();
+  return res?.payrun || res;
+};
+
+export const computePayrun = async (id) => {
+  const res = await payrollService.computePayrun(id);
+  await fetchPayrunsAsync();
+  return res;
+};
+
+export const validatePayrun = async (id) => {
+  const res = await payrollService.validatePayrun(id);
+  await fetchPayrunsAsync();
+  return res;
+};
+
+export const payPayrun = async (id) => {
+  const res = await payrollService.payPayrun(id);
+  await fetchPayrunsAsync();
+  return res;
+};
+
+export const sendPayslipsBulk = async (id) => {
+  const res = await payrollService.sendPayslipsBulk(id);
+  await fetchPayrunsAsync();
+  return res;
+};
+
+export const updatePayrun = async (id, data) => {
+  if (data.status === 'COMPUTED' || data.status === 'Computed') {
+    await payrollService.computePayrun(id);
+  } else if (data.status === 'VALIDATED' || data.status === 'Validated') {
+    await payrollService.validatePayrun(id);
+  } else if (data.status === 'PAID' || data.status === 'Paid') {
+    await payrollService.payPayrun(id);
   }
+  const refreshed = await fetchPayrunByIdAsync(id);
+  return refreshed || getPayrunById(id);
+};
+
+export const deletePayrun = async (id) => {
+  const res = await payrollService.deletePayrun(id);
+  const list = getPayruns().filter((p) => String(p.id) !== String(id) && p.runCode !== id);
+  savePayrunsToStorage(list);
+  await fetchPayrunsAsync();
+  return res;
 };

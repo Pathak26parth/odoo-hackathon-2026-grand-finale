@@ -216,6 +216,7 @@ export const UserForm = () => {
                 <option value="Employee">Employee</option>
                 <option value="HR Manager">HR Manager</option>
                 <option value="HR Payroll User">HR Payroll User</option>
+                <option value="HR Payroll Admin">HR Payroll Admin</option>
                 <option value="HR Payroll Manager">HR Payroll Manager</option>
                 <option value="Admin">Admin</option>
               </select>

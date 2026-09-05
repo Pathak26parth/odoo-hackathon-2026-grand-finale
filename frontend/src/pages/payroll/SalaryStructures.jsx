@@ -64,7 +64,7 @@ export const SalaryStructures = () => {
     const matchesSearch =
       s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || s.status === statusFilter;
+    const matchesStatus = statusFilter === 'All' || s.status?.toUpperCase() === statusFilter.toUpperCase();
     return matchesSearch && matchesStatus;
   });
 
@@ -80,12 +80,18 @@ export const SalaryStructures = () => {
     });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteModal.structure) return;
-    deleteSalaryStructure(deleteModal.structure.id);
-    setToastMessage(`Salary structure "${deleteModal.structure.name}" was deleted.`);
-    loadData();
-    setTimeout(() => setToastMessage(''), 3500);
+    try {
+      await deleteSalaryStructure(deleteModal.structure.id);
+      setToastMessage(`Salary structure "${deleteModal.structure.name}" was deleted.`);
+      const list = await fetchSalaryStructuresAsync();
+      if (Array.isArray(list)) setStructures(list);
+      setDeleteModal({ isOpen: false, structure: null });
+      setTimeout(() => setToastMessage(''), 3500);
+    } catch (err) {
+      alert('Delete failed: ' + (err.message || 'Server error'));
+    }
   };
 
   return (

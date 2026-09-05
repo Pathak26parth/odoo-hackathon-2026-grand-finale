@@ -11,17 +11,13 @@ import {
   RefreshCw,
   Clock,
   Printer,
-  FileCheck
+  FileCheck,
+  Loader2,
+  Trash2
 } from 'lucide-react';
-import { getPayrunById, updatePayrun } from '../../data/payruns';
-import { getPayslips, updatePayslip, updatePayslipsStatusByPayrun } from '../../data/payslips';
-import { getEmployees } from '../../data/employees';
-import { getContracts } from '../../data/contracts';
-import { getSalaryStructures } from '../../data/salaryStructures';
-import { getSalaryRules } from '../../data/salaryRules';
-import { calculatePayslip } from '../../utils/payrollCalculation';
+import payrollService from '../../services/payrollService';
 import { useAuth } from '../../context/AuthContext';
-import { canApprove, canMarkPaidAndSend, MODULES } from '../../utils/permissionUtils';
+import { canApprove, canMarkPaidAndSend, canDelete, MODULES } from '../../utils/permissionUtils';
 
 import { PayrunSummary } from '../../components/payroll/PayrunSummary';
 import { PayrunWarnings } from '../../components/payroll/PayrunWarnings';
@@ -36,12 +32,10 @@ export const PayrunDetail = () => {
 
   const [payrun, setPayrun] = useState(null);
   const [payslips, setPayslips] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [contracts, setContracts] = useState([]);
-  const [salaryRules, setSalaryRules] = useState([]);
-  const [salaryStructure, setSalaryStructure] = useState(null);
-
+  const [loading, setLoading] = useState(true);
   const [isComputing, setIsComputing] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
   // Modals
@@ -54,24 +48,34 @@ export const PayrunDetail = () => {
     loadData();
   }, [id]);
 
-  const loadData = () => {
-    const currentRun = getPayrunById(id);
-    if (!currentRun) return;
-
-    const allSlips = getPayslips(id);
-    const emps = getEmployees();
-    const ctrs = getContracts();
-    const rules = getSalaryRules();
-    const structures = getSalaryStructures();
-    const struct = structures.find((s) => s.id === currentRun.salaryStructureId);
-
-    setPayrun(currentRun);
-    setPayslips(allSlips);
-    setEmployees(emps);
-    setContracts(ctrs);
-    setSalaryRules(rules);
-    setSalaryStructure(struct);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const currentRun = await payrollService.getPayrunById(id);
+      if (currentRun) {
+        setPayrun(currentRun);
+        setPayslips(currentRun.payslips || []);
+      }
+    } catch (err) {
+      console.error('Failed to load payrun details:', err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-slate-200">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
+        <p className="text-xs font-semibold text-slate-600">Loading payroll batch details...</p>
+      </div>
+    );
+  }
 
   if (!payrun) {
     return (
@@ -87,160 +91,80 @@ export const PayrunDetail = () => {
     );
   }
 
-  const isDraft = payrun.status === 'Draft';
-  const isComputed = payrun.status === 'Computed';
-  const isValidated = payrun.status === 'Validated';
-  const isPaid = payrun.status === 'Paid';
+  const statusUpper = (payrun.status || 'DRAFT').toUpperCase();
+  const isDraft = statusUpper === 'DRAFT';
+  const isComputed = statusUpper === 'COMPUTED';
+  const isValidated = statusUpper === 'VALIDATED';
+  const isPaid = statusUpper === 'PAID';
 
   // Role permissions
   const canMarkPaid = canMarkPaidAndSend(role);
+  const canDeleteRun = canDelete(role, MODULES.PAYRUNS) && !isPaid;
 
   // COMPUTE PAYROLL
   const handleCompute = async () => {
-    setIsComputing(true);
-    await new Promise((r) => setTimeout(r, 600));
-
-    let runTotalBasic = 0;
-    let runTotalAllowances = 0;
-    let runTotalGross = 0;
-    let runTotalDeductions = 0;
-    let runTotalNet = 0;
-    const accumulatedWarnings = [];
-
-    const computedSlips = payslips.map((slip) => {
-      const emp = employees.find((e) => e.id === slip.employeeId);
-      const contract = contracts.find(
-        (c) => c.employeeId === slip.employeeId && c.status === 'Active'
-      );
-
-      const calculated = calculatePayslip(
-        emp,
-        contract,
-        salaryStructure,
-        salaryRules
-      );
-
-      runTotalBasic += calculated.basic;
-      runTotalAllowances += calculated.allowances;
-      runTotalGross += calculated.gross;
-      runTotalDeductions += calculated.deductions;
-      runTotalNet += calculated.net;
-
-      if (calculated.warnings && calculated.warnings.length > 0) {
-        calculated.warnings.forEach((w) => accumulatedWarnings.push(w.message || w));
-      }
-
-      const updatedSlip = {
-        ...slip,
-        basic: calculated.basic,
-        allowances: calculated.allowances,
-        gross: calculated.gross,
-        deductions: calculated.deductions,
-        net: calculated.net,
-        lines: calculated.lines,
-        warnings: calculated.warnings.map((w) => w.message || w.type),
-        status: 'Computed'
-      };
-
-      updatePayslip(slip.id, updatedSlip);
-      return updatedSlip;
-    });
-
-    const updatedPayrun = updatePayrun(payrun.id, {
-      status: 'Computed',
-      totalBasic: runTotalBasic,
-      totalAllowances: runTotalAllowances,
-      totalGross: runTotalGross,
-      totalDeductions: runTotalDeductions,
-      totalNet: runTotalNet,
-      warnings: Array.from(new Set(accumulatedWarnings))
-    });
-
-    setPayrun(updatedPayrun);
-    setPayslips(computedSlips);
-    setIsComputing(false);
-    showToast('Payroll computed successfully based on configured salary rules.');
-  };
-
-  // RECOMPUTE SINGLE PAYSLIP
-  const handleRecomputeSlip = (slipId) => {
-    const slip = payslips.find((s) => s.id === slipId);
-    if (!slip) return;
-
-    const emp = employees.find((e) => e.id === slip.employeeId);
-    const contract = contracts.find(
-      (c) => c.employeeId === slip.employeeId && c.status === 'Active'
-    );
-
-    const calculated = calculatePayslip(emp, contract, salaryStructure, salaryRules);
-    const updated = updatePayslip(slipId, {
-      basic: calculated.basic,
-      allowances: calculated.allowances,
-      gross: calculated.gross,
-      deductions: calculated.deductions,
-      net: calculated.net,
-      lines: calculated.lines,
-      status: 'Computed'
-    });
-
-    setPayslips(payslips.map((s) => (s.id === slipId ? updated : s)));
-    showToast(`Recomputed payslip for ${slip.employeeName}.`);
+    try {
+      setIsComputing(true);
+      await payrollService.computePayrun(payrun.id);
+      await loadData();
+      showToast('Payroll computed successfully based on configured salary rules and attendance.');
+    } catch (err) {
+      alert('Computation failed: ' + (err.message || 'Server error occurred'));
+    } finally {
+      setIsComputing(false);
+    }
   };
 
   // VALIDATE PAYRUN
-  const handleValidate = () => {
-    // Check blocking warnings (e.g. missing contracts)
-    const blockers = [];
-    payslips.forEach((s) => {
-      const activeCtr = contracts.find(
-        (c) => c.employeeId === s.employeeId && c.status === 'Active'
-      );
-      if (!activeCtr) {
-        blockers.push(`Employee ${s.employeeName} has no applicable active contract.`);
-      }
-    });
-
-    if (blockers.length > 0) {
-      setBlockingIssues(blockers);
-      setIsValidationModalOpen(true);
-      return;
+  const handleValidate = async () => {
+    try {
+      setIsValidating(true);
+      await payrollService.validatePayrun(payrun.id);
+      await loadData();
+      showToast('Payrun validated successfully.');
+    } catch (err) {
+      alert('Validation failed: ' + (err.message || 'Server error occurred'));
+    } finally {
+      setIsValidating(false);
     }
-
-    // Mark Validated
-    const updated = updatePayrun(payrun.id, { status: 'Validated' });
-    updatePayslipsStatusByPayrun(payrun.id, 'Validated');
-    setPayrun(updated);
-    setPayslips(getPayslips(payrun.id));
-    showToast('Payrun validated successfully.');
   };
 
   // MARK AS PAID
-  const handleConfirmMarkPaid = () => {
-    const updated = updatePayrun(payrun.id, {
-      status: 'Paid',
-      paidAt: new Date().toISOString().split('T')[0]
-    });
-    updatePayslipsStatusByPayrun(payrun.id, 'Paid');
-    setPayrun(updated);
-    setPayslips(getPayslips(payrun.id));
-    setIsMarkPaidModalOpen(false);
-    showToast('Payrun marked as Paid. Records are now historical and read-only.');
+  const handleConfirmMarkPaid = async () => {
+    try {
+      setIsMarkingPaid(true);
+      await payrollService.payPayrun(payrun.id);
+      await loadData();
+      setIsMarkPaidModalOpen(false);
+      showToast('Payrun marked as Paid. Records are now historical and read-only.');
+    } catch (err) {
+      alert('Mark Paid failed: ' + (err.message || 'Server error occurred'));
+    } finally {
+      setIsMarkingPaid(false);
+    }
   };
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this payrun batch and its payslips?')) {
+      try {
+        await payrollService.deletePayrun(payrun.id);
+        navigate('/payroll/payruns');
+      } catch (err) {
+        alert('Delete failed: ' + (err.message || 'Server error occurred'));
+      }
+    }
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Paid':
+    const s = (status || '').toUpperCase();
+    switch (s) {
+      case 'PAID':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'Validated':
+      case 'VALIDATED':
         return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Computed':
+      case 'COMPUTED':
         return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Draft':
+      case 'DRAFT':
       default:
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
@@ -276,14 +200,15 @@ export const PayrunDetail = () => {
                     payrun.status
                   )}`}
                 >
-                  {payrun.status}
+                  {statusUpper}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {payrun.salaryStructureName} • Period:{' '}
+                {payrun.structure || payrun.structure_name || 'Standard Structure'} • Period:{' '}
                 <span className="font-mono text-slate-700">
                   {payrun.periodStart} &rarr; {payrun.periodEnd}
                 </span>
+                {payrun.runCode && <span className="ml-2 font-mono text-slate-400">[{payrun.runCode}]</span>}
               </p>
             </div>
           </div>
@@ -298,25 +223,25 @@ export const PayrunDetail = () => {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
             >
               <Calculator className={`w-3.5 h-3.5 ${isComputing ? 'animate-spin' : ''}`} />
-              {isComputing ? 'Computing...' : 'Compute'}
+              {isComputing ? 'Computing...' : isComputed ? 'Recompute' : 'Compute'}
             </button>
 
             {/* Validate Button */}
             <button
               type="button"
               onClick={handleValidate}
-              disabled={!isComputed || isValidated || isPaid}
+              disabled={!isComputed || isValidated || isPaid || isValidating}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
             >
               <FileCheck className="w-3.5 h-3.5" />
-              Validate
+              {isValidating ? 'Validating...' : 'Validate'}
             </button>
 
             {/* Mark Paid Button */}
             <button
               type="button"
               onClick={() => setIsMarkPaidModalOpen(true)}
-              disabled={!isValidated || isPaid || !canMarkPaid}
+              disabled={!isValidated || isPaid || !canMarkPaid || isMarkingPaid}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
             >
               <DollarSign className="w-3.5 h-3.5" />
@@ -333,14 +258,25 @@ export const PayrunDetail = () => {
               <Mail className="w-3.5 h-3.5" />
               Send Payslips
             </button>
+
+            {canDeleteRun && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="p-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition-colors"
+                title="Delete Payrun"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Payrun Summary Cards */}
         <PayrunSummary
-          employeeCount={payrun.employeeCount || payslips.length}
-          basic={payrun.totalBasic}
-          allowances={payrun.totalAllowances}
+          employeeCount={payrun.payslipsCount || payslips.length}
+          basic={payrun.totalGross ? payrun.totalGross * 0.5 : 0}
+          allowances={payrun.totalGross ? payrun.totalGross * 0.5 : 0}
           gross={payrun.totalGross}
           deductions={payrun.totalDeductions}
           net={payrun.totalNet}
@@ -358,7 +294,7 @@ export const PayrunDetail = () => {
           <div>
             <h2 className="text-sm font-bold text-slate-900">Payslip Records</h2>
             <p className="text-xs text-slate-500">
-              {payslips.length} individual employee payslip calculations in this payrun.
+              {payslips.length} individual employee payslip calculations computed in this batch.
             </p>
           </div>
         </div>
@@ -366,7 +302,7 @@ export const PayrunDetail = () => {
         <PayslipTable
           payslips={payslips}
           onView={(slipId) => navigate(`/payroll/payslips/${slipId}`)}
-          onRecompute={handleRecomputeSlip}
+          onRecompute={() => handleCompute()}
           onPrint={(slipId) => navigate(`/payroll/payslips/${slipId}?print=true`)}
           isPayrunPaid={isPaid}
         />
@@ -448,7 +384,7 @@ export const PayrunDetail = () => {
         onClose={() => setIsSendModalOpen(false)}
         payrun={payrun}
         payslips={payslips}
-        onFinished={() => setPayslips(getPayslips(payrun.id))}
+        onFinished={() => loadData()}
       />
     </div>
   );

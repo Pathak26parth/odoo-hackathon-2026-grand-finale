@@ -4,14 +4,17 @@ const STORAGE_KEY = 'peoplepay360_salary_rules_data';
 
 export const INITIAL_RULES = [];
 
-export const calculateSalaryBreakdown = (baseSalary = 50000) => {
-  const basic = Number(baseSalary) || 0;
-  const hra = Math.round(basic * 0.4);
-  const sa = 5000;
+export const calculateSalaryBreakdown = (baseSalary = 50000, rulesList = null) => {
+  const wage = Number(baseSalary) || 0;
+  const basic = Math.round(wage * 0.5);
+  const hra = Math.round(basic * 0.5);
+  const sa = Math.max(0, wage - (basic + hra));
   const gross = basic + hra + sa;
   const pf = Math.round(basic * 0.12);
-  const pt = 200;
-  const net = gross - (pf + pt);
+  const pt = wage > 12000 ? 200 : 0;
+  const tds = Math.round(gross * 0.10);
+  const totalDed = pf + pt + tds;
+  const net = Math.max(0, gross - totalDed);
 
   return [
     {
@@ -20,30 +23,30 @@ export const calculateSalaryBreakdown = (baseSalary = 50000) => {
       code: 'BASIC',
       category: 'BASIC',
       type: 'base',
-      calcText: 'Base contract wage',
+      calcText: '50% of Contract Wage',
       amount: basic
     },
     {
       step: 2,
       title: 'House Rent Allowance (HRA)',
       code: 'HRA',
-      category: 'ALW',
+      category: 'ALLOWANCE',
       type: 'add',
-      calcText: '40% of Basic wage',
+      calcText: '50% of Basic wage',
       amount: hra
     },
     {
       step: 3,
-      title: 'Special Allowance',
+      title: 'Special Allowance (SA)',
       code: 'SA',
-      category: 'ALW',
+      category: 'ALLOWANCE',
       type: 'add',
-      calcText: 'Fixed monthly corporate stipend',
+      calcText: 'Wage - (BASIC + HRA)',
       amount: sa
     },
     {
       step: 4,
-      title: 'Gross Salary',
+      title: 'Gross Earnings',
       code: 'GROSS',
       category: 'GROSS',
       type: 'subtotal',
@@ -54,7 +57,7 @@ export const calculateSalaryBreakdown = (baseSalary = 50000) => {
       step: 5,
       title: 'Provident Fund (PF)',
       code: 'PF',
-      category: 'DED',
+      category: 'DEDUCTION',
       type: 'deduct',
       calcText: '12% of Basic contribution',
       amount: pf
@@ -63,13 +66,22 @@ export const calculateSalaryBreakdown = (baseSalary = 50000) => {
       step: 6,
       title: 'Professional Tax (PT)',
       code: 'PT',
-      category: 'DED',
+      category: 'DEDUCTION',
       type: 'deduct',
-      calcText: 'State statutory deduction',
+      calcText: 'Statutory fixed deduction',
       amount: pt
     },
     {
       step: 7,
+      title: 'Tax Deducted at Source (TDS)',
+      code: 'TDS',
+      category: 'DEDUCTION',
+      type: 'deduct',
+      calcText: '10% of Gross Earnings',
+      amount: tds
+    },
+    {
+      step: 8,
       title: 'Net Take Home Salary',
       code: 'NET',
       category: 'NET',
@@ -119,46 +131,42 @@ export const getSalaryRuleById = (id) => {
   return list.find((r) => String(r.id) === String(id) || r.code === id) || null;
 };
 
-export const createSalaryRule = async (data) => {
+export const fetchSalaryRuleByIdAsync = async (id) => {
   try {
-    const res = await payrollService.createSalaryRule(data);
-    await fetchSalaryRulesAsync();
-    return res;
+    const rule = await payrollService.getSalaryRuleById(id);
+    if (rule) {
+      const currentList = getSalaryRules();
+      const idx = currentList.findIndex((r) => String(r.id) === String(id) || r.code === id);
+      if (idx !== -1) {
+        currentList[idx] = rule;
+      } else {
+        currentList.push(rule);
+      }
+      saveSalaryRulesToStorage(currentList);
+      return rule;
+    }
   } catch (err) {
-    console.warn('Backend create salary rule fallback:', err.message);
-    const list = getSalaryRules();
-    const newRule = { id: String(Date.now()), ...data };
-    saveSalaryRulesToStorage([newRule, ...list]);
-    return newRule;
+    console.warn('[Data Bridge] getSalaryRuleById failed:', err.message);
   }
+  return getSalaryRuleById(id);
+};
+
+export const createSalaryRule = async (data) => {
+  const res = await payrollService.createSalaryRule(data);
+  await fetchSalaryRulesAsync();
+  return res;
 };
 
 export const updateSalaryRule = async (id, data) => {
-  try {
-    const res = await payrollService.updateSalaryRule(id, data);
-    await fetchSalaryRulesAsync();
-    return res;
-  } catch (err) {
-    console.warn('Backend update salary rule fallback:', err.message);
-    const list = getSalaryRules();
-    const idx = list.findIndex((r) => String(r.id) === String(id) || r.code === id);
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], ...data };
-      saveSalaryRulesToStorage(list);
-    }
-    return data;
-  }
+  const res = await payrollService.updateSalaryRule(id, data);
+  await fetchSalaryRulesAsync();
+  return res;
 };
 
 export const deleteSalaryRule = async (id) => {
-  try {
-    const res = await payrollService.deleteSalaryRule(id);
-    await fetchSalaryRulesAsync();
-    return res;
-  } catch (err) {
-    console.error('Delete salary rule failed on backend:', err.message);
-    const list = getSalaryRules().filter((r) => String(r.id) !== String(id) && r.code !== id);
-    saveSalaryRulesToStorage(list);
-    return true;
-  }
+  const res = await payrollService.deleteSalaryRule(id);
+  const list = getSalaryRules().filter((r) => String(r.id) !== String(id) && r.code !== id);
+  saveSalaryRulesToStorage(list);
+  await fetchSalaryRulesAsync();
+  return res;
 };

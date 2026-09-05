@@ -6,6 +6,7 @@ import {
   createSalaryRule,
   updateSalaryRule
 } from '../../data/salaryRules';
+import payrollService from '../../services/payrollService';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SalaryRuleForm } from '../../components/payroll/SalaryRuleForm';
@@ -25,15 +26,22 @@ export const SalaryRuleDetail = () => {
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    if (!isCreate) {
-      const existing = getSalaryRuleById(id);
-      if (existing) {
-        setRuleData(existing);
-      } else {
-        alert('Salary rule not found');
-        navigate('/payroll/salary-rules');
+    async function load() {
+      if (!isCreate) {
+        try {
+          const existing = await payrollService.getSalaryRuleById(id);
+          if (existing) {
+            setRuleData(existing);
+          } else {
+            alert('Salary rule not found');
+            navigate('/payroll/salary-rules');
+          }
+        } catch (err) {
+          console.error('Failed to load salary rule:', err);
+        }
       }
     }
+    load();
   }, [id, isCreate, navigate]);
 
   if (!hasAccess) {
@@ -50,13 +58,13 @@ export const SalaryRuleDetail = () => {
     );
   }
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
       if (isCreate) {
-        createSalaryRule(data);
+        await createSalaryRule(data);
         setToastMessage(`Salary rule "${data.name}" created!`);
       } else {
-        updateSalaryRule(id, data);
+        await updateSalaryRule(id, data);
         setToastMessage(`Salary rule "${data.name}" updated!`);
       }
 

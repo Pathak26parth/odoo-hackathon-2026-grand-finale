@@ -59,8 +59,14 @@ export const SalaryRules = () => {
       r.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCat = categoryFilter === 'All' || r.category === categoryFilter;
-    const matchesStatus = statusFilter === 'All' || r.status === statusFilter;
+    
+    const catPrefix = categoryFilter.slice(0, 3).toUpperCase();
+    const matchesCat =
+      categoryFilter === 'All' ||
+      r.category?.toUpperCase().startsWith(catPrefix) ||
+      r.category?.toUpperCase() === categoryFilter.toUpperCase();
+
+    const matchesStatus = statusFilter === 'All' || r.status?.toUpperCase() === statusFilter.toUpperCase();
     return matchesSearch && matchesCat && matchesStatus;
   });
 
@@ -78,12 +84,18 @@ export const SalaryRules = () => {
     });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteModal.rule) return;
-    deleteSalaryRule(deleteModal.rule.id);
-    setToastMessage(`Salary rule "${deleteModal.rule.name}" (${deleteModal.rule.code}) removed.`);
-    loadData();
-    setTimeout(() => setToastMessage(''), 3500);
+    try {
+      await deleteSalaryRule(deleteModal.rule.id);
+      setToastMessage(`Salary rule "${deleteModal.rule.name}" (${deleteModal.rule.code}) removed.`);
+      const list = await fetchSalaryRulesAsync();
+      if (Array.isArray(list)) setRules(list);
+      setDeleteModal({ isOpen: false, rule: null });
+      setTimeout(() => setToastMessage(''), 3500);
+    } catch (err) {
+      alert('Delete failed: ' + (err.message || 'Server error'));
+    }
   };
 
   return (

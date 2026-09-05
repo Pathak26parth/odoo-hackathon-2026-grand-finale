@@ -1,13 +1,9 @@
 // pages/payroll/PayrunWizard.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, AlertCircle, CheckCircle2, Users, Search, Filter } from 'lucide-react';
-import { getSalaryStructures } from '../../data/salaryStructures';
-import { getEmployees } from '../../data/employees';
-import { getContracts } from '../../data/contracts';
-import { createPayrun } from '../../data/payruns';
-import { createPayslipsBatch } from '../../data/payslips';
-import { evaluateEmployeeEligibility } from '../../utils/contractUtils';
+import { ArrowLeft, ArrowRight, Check, AlertCircle, AlertTriangle, CheckCircle2, Users, Search, Filter, Loader2 } from 'lucide-react';
+import payrollService from '../../services/payrollService';
+import employeeService from '../../services/employeeService';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 export const PayrunWizard = () => {
@@ -16,64 +12,67 @@ export const PayrunWizard = () => {
   // Wizard Step: 1 or 2
   const [currentStep, setCurrentStep] = useState(1);
 
-  // Data
+  // Dynamic Metadata
   const [structures, setStructures] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [contracts, setContracts] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validatingScope, setValidatingScope] = useState(false);
+
+  // Dynamic Date calculation
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const monthName = now.toLocaleString('default', { month: 'long' });
+  const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
 
   // Step 1 Form state
   const [formData, setFormData] = useState({
-    name: 'October 2026 Regular Payroll',
-    salaryStructureId: 'struct-1',
-    periodStart: '2026-10-01',
-    periodEnd: '2026-10-31'
+    name: `${monthName} ${year} Regular Payroll`,
+    salaryStructureId: '',
+    periodStart: `${year}-${month}-01`,
+    periodEnd: `${year}-${month}-${String(lastDay).padStart(2, '0')}`
   });
   const [errors, setErrors] = useState({});
 
-  // Step 2 Employee selection state
+  // Step 2 Employee selection & Scope validation state
+  const [scopeData, setScopeData] = useState({
+    eligibleEmployees: [],
+    warnings: [],
+    blockingErrors: []
+  });
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [searchEmployee, setSearchEmployee] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
 
   useEffect(() => {
-    const loadedStructures = getSalaryStructures();
-    const loadedEmployees = getEmployees();
-    const loadedContracts = getContracts();
+    async function initData() {
+      try {
+        setLoadingInitial(true);
+        const [structs, depts] = await Promise.all([
+          payrollService.getSalaryStructures().catch(() => []),
+          employeeService.getDepartments().catch(() => [])
+        ]);
 
-    setStructures(loadedStructures);
-    setEmployees(loadedEmployees);
-    setContracts(loadedContracts);
+        setStructures(structs);
+        setDepartments(depts);
 
-    if (loadedStructures.length > 0 && !formData.salaryStructureId) {
-      setFormData((prev) => ({ ...prev, salaryStructureId: loadedStructures[0].id }));
+        if (structs.length > 0) {
+          setFormData((prev) => ({
+            ...prev,
+            salaryStructureId: String(structs[0].id)
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load payroll wizard data:', err);
+      } finally {
+        setLoadingInitial(false);
+      }
     }
+    initData();
   }, []);
 
-  const selectedStructure = structures.find((s) => s.id === formData.salaryStructureId);
-
-  // Evaluate employee eligibility list for Step 2
-  const evaluatedEmployees = employees.map((emp) => {
-    const evalResult = evaluateEmployeeEligibility(
-      emp,
-      formData.periodStart,
-      formData.periodEnd,
-      selectedStructure?.name || 'Standard Monthly Salary'
-    );
-    return {
-      employee: emp,
-      ...evalResult
-    };
-  });
-
-  // Set default selected employees to eligible ones when transitioning to step 2
-  useEffect(() => {
-    if (currentStep === 2 && selectedEmployees.length === 0) {
-      const eligibleIds = evaluatedEmployees
-        .filter((item) => item.isEligible)
-        .map((item) => item.employee.id);
-      setSelectedEmployees(eligibleIds);
-    }
-  }, [currentStep]);
+  const selectedStructure = structures.find((s) => String(s.id) === String(formData.salaryStructureId));
 
   // Step 1 Validation
   const validateStep1 = () => {
@@ -98,10 +97,33 @@ export const PayrunWizard = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleContinue = (e) => {
+  const handleContinue = async (e) => {
     e.preventDefault();
-    if (validateStep1()) {
+    if (!validateStep1()) return;
+
+    try {
+      setValidatingScope(true);
+      const res = await payrollService.validateScope({
+        salaryStructureId: Number(formData.salaryStructureId),
+        periodStart: formData.periodStart,
+        periodEnd: formData.periodEnd
+      });
+
+      const data = res.data || res;
+      setScopeData({
+        eligibleEmployees: data.eligibleEmployees || [],
+        warnings: data.warnings || [],
+        blockingErrors: data.blockingErrors || []
+      });
+
+      // Default select all eligible employees
+      const eligibleIds = (data.eligibleEmployees || []).map((e) => e.id);
+      setSelectedEmployees(eligibleIds);
       setCurrentStep(2);
+    } catch (err) {
+      alert('Scope validation error: ' + (err.message || 'Could not validate payroll scope'));
+    } finally {
+      setValidatingScope(false);
     }
   };
 
@@ -110,16 +132,13 @@ export const PayrunWizard = () => {
   };
 
   // Step 2 Selection toggles
-  const handleToggleSelectAll = (filteredItems) => {
-    const eligibleFilteredIds = filteredItems
-      .filter((i) => i.isEligible)
-      .map((i) => i.employee.id);
-
-    const allSelected = eligibleFilteredIds.every((id) => selectedEmployees.includes(id));
+  const handleToggleSelectAll = (items) => {
+    const ids = items.map((i) => i.id);
+    const allSelected = ids.every((id) => selectedEmployees.includes(id));
     if (allSelected) {
-      setSelectedEmployees(selectedEmployees.filter((id) => !eligibleFilteredIds.includes(id)));
+      setSelectedEmployees(selectedEmployees.filter((id) => !ids.includes(id)));
     } else {
-      setSelectedEmployees(Array.from(new Set([...selectedEmployees, ...eligibleFilteredIds])));
+      setSelectedEmployees(Array.from(new Set([...selectedEmployees, ...ids])));
     }
   };
 
@@ -131,70 +150,43 @@ export const PayrunWizard = () => {
     }
   };
 
-  // Final Payrun Creation
-  const handleCreatePayrun = () => {
-    const chosenStructure = structures.find((s) => s.id === formData.salaryStructureId);
+  // Final Payrun Creation through backend
+  const handleCreatePayrun = async () => {
+    if (selectedEmployees.length === 0) {
+      alert('Please select at least one employee for the payrun.');
+      return;
+    }
 
-    // Create the Payrun in Draft status
-    const created = createPayrun({
-      name: formData.name,
-      salaryStructureId: formData.salaryStructureId,
-      salaryStructureName: chosenStructure?.name || 'Standard Monthly Salary',
-      periodStart: formData.periodStart,
-      periodEnd: formData.periodEnd,
-      selectedEmployeeIds: selectedEmployees,
-      employeeCount: selectedEmployees.length,
-      warnings: []
-    });
+    try {
+      setIsSubmitting(true);
+      const res = await payrollService.createPayrun({
+        name: formData.name,
+        salaryStructureId: Number(formData.salaryStructureId),
+        periodStart: formData.periodStart,
+        periodEnd: formData.periodEnd,
+        employeeIds: selectedEmployees
+      });
 
-    // Generate initial Draft Payslips for the selected employees
-    const initialPayslips = selectedEmployees.map((empId, index) => {
-      const emp = employees.find((e) => e.id === empId);
-      const evalItem = evaluatedEmployees.find((item) => item.employee.id === empId);
-      const wage = Number(evalItem?.contract?.wage) || 0;
-
-      return {
-        id: `slip-${created.id}-${index + 1}`,
-        slipNumber: `SLIP-${created.periodStart.slice(0, 7)}-${String(index + 1).padStart(3, '0')}`,
-        payrunId: created.id,
-        payrunName: created.name,
-        employeeId: emp.id,
-        employeeCode: emp.employeeId,
-        employeeName: emp.name,
-        department: emp.department,
-        position: emp.position,
-        contractId: evalItem?.contract?.id || null,
-        salaryStructureId: created.salaryStructureId,
-        salaryStructureName: created.salaryStructureName,
-        periodStart: created.periodStart,
-        periodEnd: created.periodEnd,
-        period: `${created.periodStart} - ${created.periodEnd}`,
-        workedDays: 22,
-        basic: wage,
-        allowances: 0,
-        gross: wage,
-        deductions: 0,
-        net: wage,
-        status: 'Draft',
-        emailStatus: 'Not Sent',
-        warnings: evalItem?.warning ? [evalItem.warning] : [],
-        lines: []
-      };
-    });
-
-    createPayslipsBatch(initialPayslips);
-
-    // Navigate to Payrun Detail processing screen
-    navigate(`/payroll/payruns/${created.id}`);
+      const created = res.data || res;
+      const targetId = created.payrunId || created.id || (created.payrun ? created.payrun.id : null);
+      if (targetId) {
+        navigate(`/payroll/payruns/${targetId}`);
+      } else {
+        navigate('/payroll/payruns');
+      }
+    } catch (err) {
+      alert('Failed to generate payrun: ' + (err.message || 'Server error occurred'));
+      setIsSubmitting(false);
+    }
   };
 
   // Step 2 filtered list
-  const filteredEmployeesList = evaluatedEmployees.filter((item) => {
+  const filteredEmployeesList = (scopeData.eligibleEmployees || []).filter((item) => {
     const matchesSearch =
-      item.employee.name.toLowerCase().includes(searchEmployee.toLowerCase()) ||
-      item.employee.employeeId.toLowerCase().includes(searchEmployee.toLowerCase()) ||
-      item.employee.department.toLowerCase().includes(searchEmployee.toLowerCase());
-    const matchesDept = departmentFilter === 'All' || item.employee.department === departmentFilter;
+      item.name?.toLowerCase().includes(searchEmployee.toLowerCase()) ||
+      item.employeeCode?.toLowerCase().includes(searchEmployee.toLowerCase()) ||
+      item.department?.toLowerCase().includes(searchEmployee.toLowerCase());
+    const matchesDept = departmentFilter === 'All' || item.department === departmentFilter;
     return matchesSearch && matchesDept;
   });
 
@@ -205,7 +197,7 @@ export const PayrunWizard = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">New Payrun</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Configure pay period parameters and select eligible employees for payroll computation.
+            Configure pay period parameters and select eligible employees for live payroll computation.
           </p>
         </div>
       </div>
@@ -221,38 +213,53 @@ export const PayrunWizard = () => {
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px]">
+          <span
+            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              currentStep === 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+            }`}
+          >
             1
           </span>
-          Payrun Details
+          Period Parameters
         </button>
 
         <button
           type="button"
-          onClick={() => validateStep1() && setCurrentStep(2)}
+          onClick={() => {
+            if (validateStep1()) setCurrentStep(2);
+          }}
           className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg transition-all ${
             currentStep === 2
               ? 'bg-white text-blue-700 shadow-2xs font-bold'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px]">
+          <span
+            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              currentStep === 2 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+            }`}
+          >
             2
           </span>
           Select Employees
         </button>
       </div>
 
-      {/* STEP 1: Payrun Details */}
+      {/* STEP 1: Parameters Form */}
       {currentStep === 1 && (
-        <form onSubmit={handleContinue} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
+        <form
+          onSubmit={handleContinue}
+          className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5 text-xs"
+        >
           <div className="pb-3 border-b border-slate-100">
-            <h2 className="text-sm font-bold text-slate-900">Step 1 — Payrun Details</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Define name, salary structure, and date range.</p>
+            <h2 className="text-sm font-bold text-slate-900">Step 1 — Payrun Parameters</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Set the period name, date range, and the salary structure for this payroll batch.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="sm:col-span-2">
+          <div className="space-y-4">
+            <div>
               <label className="block font-semibold text-slate-700 mb-1">
                 Payrun Name <span className="text-rose-500">*</span>
               </label>
@@ -268,56 +275,67 @@ export const PayrunWizard = () => {
               {errors.name && <p className="text-rose-500 text-[11px] mt-1">{errors.name}</p>}
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block font-semibold text-slate-700 mb-1">
                 Salary Structure <span className="text-rose-500">*</span>
               </label>
               <select
                 value={formData.salaryStructureId}
                 onChange={(e) => setFormData({ ...formData, salaryStructureId: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 rounded-xl border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  errors.salaryStructureId ? 'border-rose-400' : 'border-slate-300'
+                }`}
               >
                 {structures.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.ruleCount} Rules configured)
+                    {s.name} ({s.code})
                   </option>
                 ))}
               </select>
               {errors.salaryStructureId && (
                 <p className="text-rose-500 text-[11px] mt-1">{errors.salaryStructureId}</p>
               )}
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Period Start Date <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={formData.periodStart}
-                onChange={(e) => setFormData({ ...formData, periodStart: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.periodStart && (
-                <p className="text-rose-500 text-[11px] mt-1">{errors.periodStart}</p>
+              {selectedStructure && (
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {selectedStructure.description || 'Applies sequential rule calculations including Basic, HRA, Allowances, and Deductions.'}
+                </p>
               )}
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Period End Date <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={formData.periodEnd}
-                onChange={(e) => setFormData({ ...formData, periodEnd: e.target.value })}
-                className={`w-full px-3 py-2 rounded-xl border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.periodEnd ? 'border-rose-400' : 'border-slate-300'
-                }`}
-              />
-              {errors.periodEnd && (
-                <p className="text-rose-500 text-[11px] mt-1">{errors.periodEnd}</p>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Period Start Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.periodStart}
+                  onChange={(e) => setFormData({ ...formData, periodStart: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-xl border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.periodStart ? 'border-rose-400' : 'border-slate-300'
+                  }`}
+                />
+                {errors.periodStart && (
+                  <p className="text-rose-500 text-[11px] mt-1">{errors.periodStart}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Period End Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.periodEnd}
+                  onChange={(e) => setFormData({ ...formData, periodEnd: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-xl border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.periodEnd ? 'border-rose-400' : 'border-slate-300'
+                  }`}
+                />
+                {errors.periodEnd && (
+                  <p className="text-rose-500 text-[11px] mt-1">{errors.periodEnd}</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -331,9 +349,19 @@ export const PayrunWizard = () => {
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors"
+              disabled={validatingScope || loadingInitial}
+              className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors disabled:opacity-50"
             >
-              Continue <ArrowRight className="w-3.5 h-3.5" />
+              {validatingScope ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Validating Scope...
+                </>
+              ) : (
+                <>
+                  Continue <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -344,16 +372,45 @@ export const PayrunWizard = () => {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Step 2 — Select Employees</h2>
+              <h2 className="text-sm font-bold text-slate-900">Step 2 — Select Eligible Employees</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Verify employee eligibility against active contracts and salary structure match.
+                Evaluated from database contracts and active employee records for period {formData.periodStart} to {formData.periodEnd}.
               </p>
             </div>
             <div className="text-xs font-semibold text-slate-700">
               Selected: <strong className="text-blue-600">{selectedEmployees.length}</strong> of{' '}
-              {evaluatedEmployees.filter((e) => e.isEligible).length} Eligible
+              {scopeData.eligibleEmployees.length} Eligible
             </div>
           </div>
+
+          {/* Pre-flight Warnings / Blocking Errors */}
+          {scopeData.blockingErrors?.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
+              <div className="flex items-center gap-2 font-bold text-rose-800">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Eligibility Exclusions ({scopeData.blockingErrors.length})</span>
+              </div>
+              <ul className="list-disc list-inside text-rose-700 pl-1 space-y-0.5">
+                {scopeData.blockingErrors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {scopeData.warnings?.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="flex items-center gap-2 font-bold text-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Pre-Flight Warnings ({scopeData.warnings.length})</span>
+              </div>
+              <ul className="list-disc list-inside text-amber-700 pl-1 space-y-0.5">
+                {scopeData.warnings.map((warn, i) => (
+                  <li key={i}>{warn}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Filters & Search */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
@@ -363,7 +420,7 @@ export const PayrunWizard = () => {
                 type="text"
                 value={searchEmployee}
                 onChange={(e) => setSearchEmployee(e.target.value)}
-                placeholder="Search employee or ID..."
+                placeholder="Search employee or code..."
                 className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -376,11 +433,11 @@ export const PayrunWizard = () => {
                 className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="All">All Departments</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Human Resources">Human Resources</option>
-                <option value="Finance">Finance</option>
-                <option value="Sales">Sales</option>
-                <option value="Design">Design</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -394,10 +451,8 @@ export const PayrunWizard = () => {
                     <input
                       type="checkbox"
                       checked={
-                        filteredEmployeesList.filter((i) => i.isEligible).length > 0 &&
-                        filteredEmployeesList
-                          .filter((i) => i.isEligible)
-                          .every((i) => selectedEmployees.includes(i.employee.id))
+                        filteredEmployeesList.length > 0 &&
+                        filteredEmployeesList.every((i) => selectedEmployees.includes(i.id))
                       }
                       onChange={() => handleToggleSelectAll(filteredEmployeesList)}
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -405,83 +460,101 @@ export const PayrunWizard = () => {
                   </th>
                   <th className="py-3 px-2 font-semibold">Employee</th>
                   <th className="py-3 px-3 font-semibold">Department</th>
-                  <th className="py-3 px-3 font-semibold">Position</th>
-                  <th className="py-3 px-3 font-semibold">Contract</th>
-                  <th className="py-3 px-3 font-semibold">Wage</th>
-                  <th className="py-3 px-3 font-semibold text-right">Eligibility</th>
+                  <th className="py-3 px-3 font-semibold">Contract Ref</th>
+                  <th className="py-3 px-3 font-semibold">Monthly Wage</th>
+                  <th className="py-3 px-3 font-semibold text-right">Bank Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredEmployeesList.map((item) => {
-                  const emp = item.employee;
-                  const isChecked = selectedEmployees.includes(emp.id);
-                  const isEligible = item.isEligible;
+                {filteredEmployeesList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                      No matching eligible employees found for this structure and period.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEmployeesList.map((emp) => {
+                    const isChecked = selectedEmployees.includes(emp.id);
 
-                  return (
-                    <tr
-                      key={emp.id}
-                      className={`hover:bg-slate-50/70 transition-colors ${
-                        !isEligible ? 'opacity-60 bg-slate-50/30' : ''
-                      }`}
-                    >
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={!isEligible}
-                          onChange={() => handleToggleSelectOne(emp.id)}
-                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
-                        />
-                      </td>
-                      <td className="py-3 px-2">
-                        <div className="font-bold text-slate-900">{emp.name}</div>
-                        <div className="text-[11px] text-slate-400">{emp.employeeId}</div>
-                      </td>
-                      <td className="py-3 px-3 text-slate-700">{emp.department}</td>
-                      <td className="py-3 px-3 text-slate-700">{emp.position}</td>
-                      <td className="py-3 px-3 font-mono text-[11px]">
-                        {item.contract ? item.contract.id : <span className="text-slate-400">None</span>}
-                      </td>
-                      <td className="py-3 px-3 font-mono font-medium text-slate-900">
-                        {item.wage ? formatCurrency(item.wage) : '—'}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-                            isEligible
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : item.status === 'No Active Contract'
-                              ? 'bg-rose-50 text-rose-700 border-rose-200'
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleSelectOne(emp.id)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
+                        <td className="py-3 px-2">
+                          <div className="font-bold text-slate-900">{emp.name}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{emp.employeeCode}</div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-700">{emp.department || 'General'}</td>
+                        <td className="py-3 px-3 font-mono text-[11px]">
+                          CON-{emp.contractId}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-medium text-slate-900">
+                          {emp.wage ? formatCurrency(emp.wage) : '—'}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {emp.hasBankDetails ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <Check className="w-3 h-3" /> Configured
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              <AlertCircle className="w-3 h-3" /> Missing
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
 
+          {/* Footer Navigation */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <button
               type="button"
               onClick={handleBack}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to Details
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
 
-            <button
-              type="button"
-              onClick={handleCreatePayrun}
-              disabled={selectedEmployees.length === 0}
-              className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors disabled:opacity-50"
-            >
-              <Check className="w-3.5 h-3.5" /> Create Payrun ({selectedEmployees.length})
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/payroll/payruns')}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreatePayrun}
+                disabled={isSubmitting || selectedEmployees.length === 0}
+                className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Computing & Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    Generate & Compute Payrun ({selectedEmployees.length})
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

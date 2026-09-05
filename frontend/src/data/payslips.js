@@ -32,7 +32,8 @@ export const savePayslipsToStorage = (list) => {
 
 export const fetchPayslipsAsync = async (params = {}) => {
   try {
-    const payslips = await payrollService.getPayslips(params);
+    const queryParams = typeof params === 'string' ? { payrunId: params } : params;
+    const payslips = await payrollService.getPayslips(queryParams);
     if (Array.isArray(payslips)) {
       savePayslipsToStorage(payslips);
       return payslips;
@@ -50,13 +51,33 @@ export const getPayslipById = (id) => {
 
 export const getPayslipByIdAsync = async (id) => {
   try {
-    return await payrollService.getPayslipById(id);
+    const res = await payrollService.getPayslipById(id);
+    if (res) {
+      const currentList = getPayslips();
+      const idx = currentList.findIndex((s) => String(s.id) === String(id) || s.slipNumber === id);
+      if (idx !== -1) {
+        currentList[idx] = res;
+      } else {
+        currentList.push(res);
+      }
+      savePayslipsToStorage(currentList);
+      return res;
+    }
   } catch (err) {
-    return getPayslipById(id);
+    console.warn('[Data Bridge] getPayslipById failed:', err.message);
   }
+  return getPayslipById(id);
 };
 
 export const fetchPayslipByIdAsync = getPayslipByIdAsync;
+
+export const sendPayslipEmail = async (id) => {
+  return await payrollService.sendPayslipEmail(id);
+};
+
+export const downloadPayslipPdf = async (id) => {
+  return await payrollService.downloadPayslipPdf(id);
+};
 
 export const createPayslip = async (data) => {
   const list = getPayslips();
