@@ -128,8 +128,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 Users
               )}
 
-              {/* Contracts (Hidden for Employee) */}
-              {!isEmployeeOnly && renderSingleLink('Contracts', '/contracts', FileText)}
+              {/* Contracts (My Contract for Employee, Contracts for HR/Admin) */}
+              {renderSingleLink(isEmployeeOnly ? 'My Contract' : 'Contracts', '/contracts', FileText)}
 
               {/* Working Schedules (Hidden for Employee) */}
               {!isEmployeeOnly && renderSingleLink('Working Schedules', '/working-schedules', Calendar)}

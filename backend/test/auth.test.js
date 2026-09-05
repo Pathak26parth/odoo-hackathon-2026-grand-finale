@@ -460,6 +460,104 @@ async function runTests() {
       assert(leaveRes.status === 200 && leaveRes.data.data.allocations.length >= 3, 'Annual leave allocations automatically granted upon employee creation');
     }
 
+    // -----------------------------------------------------------------
+    // TEST 10: CONTRACT MANAGEMENT & SINGLE ACTIVE CONTRACT RULE
+    // -----------------------------------------------------------------
+    console.log('\n--- TEST GROUP 10: CONTRACT MANAGEMENT & RBAC BOUNDARIES ---');
+
+    // 1. Regular employee can view own contract
+    const empContractRes = await request('/api/contracts', {
+      headers: { Authorization: `Bearer ${empToken}` }
+    });
+    assert(empContractRes.status === 200, 'Employee allowed to access /api/contracts');
+    const empContracts = empContractRes.data?.data?.contracts || [];
+    const allSelf = empContracts.every(c => String(c.employee_id) === '5');
+    assert(empContracts.length > 0 && allSelf, 'Employee only receives their own employment contract records');
+
+    // 2. Regular employee cannot access another employee contract (e.g. Contract 1)
+    const empOtherContractRes = await request('/api/contracts/1', {
+      headers: { Authorization: `Bearer ${empToken}` }
+    });
+    assert(empOtherContractRes.status === 403, 'Employee blocked from accessing another employee contract (403 Forbidden)');
+
+    // 3. Regular employee cannot create contracts
+    const empCreateContractRes = await request('/api/contracts', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: {
+        employeeId: 5,
+        wage: 100000,
+        salaryStructureId: 1,
+        startDate: '2026-10-01'
+      }
+    });
+    assert(empCreateContractRes.status === 403, 'Employee blocked from creating contract (403 Forbidden)');
+
+    // 4. Regular employee cannot update contracts
+    const empUpdateContractRes = await request('/api/contracts/5', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: { wage: 120000 }
+    });
+    assert(empUpdateContractRes.status === 403, 'Employee blocked from updating contract (403 Forbidden)');
+
+    // 5. Admin / HR Manager creates a second active contract for employee 5:
+    // Assert that the previous active contract is automatically expired (Single active contract rule)
+    const newActiveContract = await request('/api/contracts', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${hrmToken}` },
+      body: {
+        employeeId: 5,
+        wage: 105000,
+        salaryStructureId: 1,
+        workingScheduleId: 1,
+        startDate: '2026-10-01',
+        status: 'ACTIVE'
+      }
+    });
+    assert(newActiveContract.status === 201, 'HR Manager created new active promotion contract for employee 5');
+    const createdContractId = newActiveContract.data?.data?.id;
+
+    // Verify in database that prior contract (id: 5) is now EXPIRED and created contract is ACTIVE
+    const checkContracts = await query('SELECT id, status FROM contracts WHERE employee_id = 5 ORDER BY id ASC');
+    const oldContract = checkContracts.find(c => c.id === 5);
+    const newestContract = checkContracts.find(c => c.id === createdContractId);
+    assert(oldContract && oldContract.status === 'EXPIRED', 'Prior contract for employee 5 automatically transitioned to EXPIRED');
+    assert(newestContract && newestContract.status === 'ACTIVE', 'New contract for employee 5 is the sole ACTIVE contract');
+
+    // Clean up test contract and restore contract 5 back to ACTIVE
+    if (createdContractId) {
+      await query('DELETE FROM contracts WHERE id = ?', [createdContractId]);
+      await query('UPDATE contracts SET status = "ACTIVE" WHERE id = 5');
+    }
+
+    // Verify updating contract with partial fields, names, and undefined fields executes without error
+    const updateRes = await request('/api/contracts/15', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: {
+        jobPosition: 'Full Stack Engineer',
+        wage: '95000',
+        department: 'Engineering & Technology',
+        salaryStructure: 'Contractor Compensation Structure',
+        status: 'Active',
+        endDate: null
+      }
+    });
+    assert(updateRes.status === 200, 'Admin can update contract with names or IDs without undefined bind errors');
+
+    // Clean up temporary test employee and user created during Test Group 9
+    if (newEmpId) {
+      await query('DELETE FROM contracts WHERE employee_id = ?', [newEmpId]);
+      await query('DELETE FROM time_off_allocations WHERE employee_id = ?', [newEmpId]);
+      await query('DELETE FROM employee_bank_details WHERE employee_id = ?', [newEmpId]);
+      await query('DELETE FROM users WHERE employee_id = ?', [newEmpId]);
+      await query('DELETE FROM employees WHERE id = ?', [newEmpId]);
+    }
+    if (newUserId) {
+      await query('DELETE FROM users WHERE id = ?', [newUserId]);
+    }
+
     console.log('\n================================================================');
     console.log(`  TEST RESULTS: ${passed} PASSED, ${failed} FAILED                 `);
     console.log('================================================================\n');

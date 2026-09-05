@@ -231,19 +231,26 @@ export const EmployeeDetail = () => {
 
   const handleDeleteEmployee = async () => {
     const empName = `${formData.firstName} ${formData.lastName}`.trim() || formData.employeeId || 'this employee';
-    if (!window.confirm(`Are you sure you want to delete ${empName} (${formData.employeeId})?\n\nThis will permanently delete the employee profile, associated user account, contracts, and attendance records.`)) {
+    const targetId = employee?.id || id;
+
+    if (String(targetId) === '1' || formData.employeeId === 'EMP-001') {
+      alert('Safety lock: Primary System Administrator profile cannot be deleted.');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${empName} (${formData.employeeId || targetId})?\n\nThis will permanently delete the employee profile, associated user account, contracts, and send a termination notice email.`)) {
       return;
     }
 
     setDeleting(true);
     try {
-      await deleteEmployee(id);
-      setToastMessage('Employee deleted successfully.');
+      await deleteEmployee(targetId);
+      setToastMessage(`Employee "${empName}" deleted successfully.`);
       setTimeout(() => {
         navigate('/employees');
       }, 700);
     } catch (err) {
-      alert('Error deleting employee: ' + err.message);
+      alert('Error deleting employee: ' + (err.message || 'Failed to delete'));
       setDeleting(false);
     }
   };
@@ -269,6 +276,8 @@ export const EmployeeDetail = () => {
     'Night Shift (40h/week)',
     'Night Shift'
   ];
+
+  const isMasterAdmin = String(id) === '1' || formData.employeeId === 'EMP-001' || String(employee?.id) === '1';
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
@@ -313,7 +322,7 @@ export const EmployeeDetail = () => {
             </button>
           )}
 
-          {!isCreate && isHRorAdmin && (
+          {!isCreate && isHRorAdmin && !isMasterAdmin && (
             <button
               type="button"
               onClick={handleDeleteEmployee}

@@ -32,17 +32,30 @@ class ContractController {
       `;
       const params = [];
 
-      if (employeeId) {
+      // Strict RBAC: regular employees can ONLY view their own contracts
+      if (req.user.role === 'EMPLOYEE') {
+        const selfEmployeeId = req.user.employeeId || req.user.employee_id;
+        if (!selfEmployeeId) {
+          return sendSuccess(res, 'Contracts retrieved successfully', {
+            contracts: [],
+            pagination: { total: 0, page: 1, limit: parseInt(limit, 10), totalPages: 0 }
+          });
+        }
         sql += ' AND c.employee_id = ?';
-        params.push(employeeId);
-      }
-      if (status) {
-        sql += ' AND c.status = ?';
-        params.push(status);
-      }
-      if (departmentId) {
-        sql += ' AND c.department_id = ?';
-        params.push(departmentId);
+        params.push(selfEmployeeId);
+      } else {
+        if (employeeId) {
+          sql += ' AND c.employee_id = ?';
+          params.push(employeeId);
+        }
+        if (status) {
+          sql += ' AND c.status = ?';
+          params.push(status);
+        }
+        if (departmentId) {
+          sql += ' AND c.department_id = ?';
+          params.push(departmentId);
+        }
       }
 
       // Count
@@ -99,6 +112,14 @@ class ContractController {
         return sendError(res, 'Contract not found.', 404);
       }
 
+      // Strict RBAC: Employee cannot view another employee's contract
+      if (req.user.role === 'EMPLOYEE') {
+        const selfEmployeeId = req.user.employeeId || req.user.employee_id;
+        if (String(rows[0].employee_id) !== String(selfEmployeeId)) {
+          return sendError(res, 'Forbidden: You are strictly prohibited from viewing another employee\'s contract.', 403);
+        }
+      }
+
       return sendSuccess(res, 'Contract retrieved', rows[0]);
     } catch (error) {
       next(error);
@@ -111,6 +132,10 @@ class ContractController {
    */
   async createContract(req, res, next) {
     try {
+      if (req.user.role === 'EMPLOYEE') {
+        return sendError(res, 'Forbidden: Employees are not permitted to create contracts.', 403);
+      }
+
       const {
         contractCode,
         employeeId,
@@ -119,6 +144,7 @@ class ContractController {
         jobPosition,
         position,
         wage,
+        salary,
         salaryStructureId,
         salaryStructure,
         workingScheduleId,
@@ -128,7 +154,10 @@ class ContractController {
         status = 'ACTIVE'
       } = req.body;
 
-      if (!employeeId || wage === undefined || wage === null || !startDate) {
+      const resolvedWage = wage !== undefined && wage !== null ? wage : salary;
+      const resolvedJob = jobPosition || position || 'Staff';
+
+      if (!employeeId || resolvedWage === undefined || resolvedWage === null || !startDate) {
         return sendError(res, 'employeeId, wage, and startDate are required.', 400);
       }
 
@@ -179,10 +208,9 @@ class ContractController {
       }
 
       const cCode = contractCode || `CON-${resolvedEmpId}-${Date.now().toString().slice(-4)}`;
-      const resolvedJob = jobPosition || position || 'Staff';
 
       // If status is ACTIVE, ensure no overlapping ACTIVE contract exists for this employee
-      if (status.toUpperCase() === 'ACTIVE') {
+      if (status && status.toUpperCase() === 'ACTIVE') {
         await query(
           'UPDATE contracts SET status = "EXPIRED", updated_at = NOW() WHERE employee_id = ? AND status = "ACTIVE"',
           [resolvedEmpId]
@@ -197,12 +225,12 @@ class ContractController {
           resolvedEmpId,
           resolvedDeptId || null,
           resolvedJob,
-          parseFloat(wage) || 0,
+          parseFloat(resolvedWage) || 0,
           resolvedStructureId,
           resolvedScheduleId,
           startDate,
           endDate || null,
-          status.toUpperCase()
+          (status || 'ACTIVE').toUpperCase()
         ]
       );
 
@@ -225,58 +253,107 @@ class ContractController {
    */
   async updateContract(req, res, next) {
     try {
+      if (req.user.role === 'EMPLOYEE') {
+        return sendError(res, 'Forbidden: Employees are not permitted to edit contracts.', 403);
+      }
+
       const { id } = req.params;
-      const { departmentId, department, jobPosition, position, wage, salaryStructureId, salaryStructure, workingScheduleId, workingSchedule, startDate, endDate, status } = req.body;
+      const {
+        departmentId,
+        department,
+        jobPosition,
+        position,
+        wage,
+        salary,
+        salaryStructureId,
+        salaryStructure,
+        workingScheduleId,
+        workingSchedule,
+        startDate,
+        endDate,
+        status
+      } = req.body;
 
       const existing = await query('SELECT * FROM contracts WHERE id = ?', [id]);
       if (existing.length === 0) {
         return sendError(res, 'Contract not found.', 404);
       }
 
-      let resolvedDeptId = departmentId ? parseInt(departmentId, 10) : undefined;
+      const normalizedStatus = status ? status.toUpperCase() : undefined;
+
+      // Strict Business Rule: Only ONE ACTIVE contract per employee at a time
+      if (normalizedStatus === 'ACTIVE') {
+        await query(
+          'UPDATE contracts SET status = "EXPIRED", updated_at = NOW() WHERE employee_id = ? AND status = "ACTIVE" AND id != ?',
+          [existing[0].employee_id, id]
+        );
+      }
+
+      // Resolve departmentId if name provided
+      let resolvedDeptId = departmentId !== undefined ? (departmentId ? parseInt(departmentId, 10) : null) : undefined;
       if (resolvedDeptId === undefined && department) {
         const deptRows = await query('SELECT id FROM departments WHERE name = ? OR code = ? LIMIT 1', [department, department]);
         if (deptRows.length > 0) resolvedDeptId = deptRows[0].id;
       }
 
-      let resolvedStructureId = salaryStructureId ? parseInt(salaryStructureId, 10) : undefined;
+      // Resolve salaryStructureId if name provided
+      let resolvedStructureId = salaryStructureId !== undefined ? (salaryStructureId ? parseInt(salaryStructureId, 10) : null) : undefined;
       if (resolvedStructureId === undefined && salaryStructure) {
         const structRows = await query('SELECT id FROM salary_structures WHERE name = ? OR code = ? LIMIT 1', [salaryStructure, salaryStructure]);
         if (structRows.length > 0) resolvedStructureId = structRows[0].id;
       }
 
-      let resolvedScheduleId = workingScheduleId ? parseInt(workingScheduleId, 10) : undefined;
+      // Resolve workingScheduleId if name provided
+      let resolvedScheduleId = workingScheduleId !== undefined ? (workingScheduleId ? parseInt(workingScheduleId, 10) : null) : undefined;
       if (resolvedScheduleId === undefined && workingSchedule) {
         const schedRows = await query('SELECT id FROM working_schedules WHERE name = ? LIMIT 1', [workingSchedule]);
         if (schedRows.length > 0) resolvedScheduleId = schedRows[0].id;
       }
 
-      const resolvedJob = jobPosition || position;
+      const resolvedPosition = jobPosition !== undefined ? jobPosition : (position !== undefined ? position : undefined);
+      const resolvedWage = wage !== undefined ? wage : (salary !== undefined ? salary : undefined);
 
-      await query(
-        `UPDATE contracts SET
-          department_id = COALESCE(?, department_id),
-          job_position = COALESCE(?, job_position),
-          wage = COALESCE(?, wage),
-          salary_structure_id = COALESCE(?, salary_structure_id),
-          working_schedule_id = COALESCE(?, working_schedule_id),
-          start_date = COALESCE(?, start_date),
-          end_date = COALESCE(?, end_date),
-          status = COALESCE(?, status),
-          updated_at = NOW()
-        WHERE id = ?`,
-        [
-          resolvedDeptId !== undefined ? resolvedDeptId : null,
-          resolvedJob !== undefined ? resolvedJob : null,
-          wage !== undefined ? parseFloat(wage) : null,
-          resolvedStructureId !== undefined ? resolvedStructureId : null,
-          resolvedScheduleId !== undefined ? resolvedScheduleId : null,
-          startDate !== undefined ? startDate : null,
-          endDate !== undefined ? endDate : null,
-          status !== undefined ? status.toUpperCase() : null,
-          id
-        ]
-      );
+      const fields = [];
+      const params = [];
+
+      if (resolvedDeptId !== undefined) {
+        fields.push('department_id = ?');
+        params.push(resolvedDeptId || null);
+      }
+      if (resolvedPosition !== undefined) {
+        fields.push('job_position = ?');
+        params.push(resolvedPosition || null);
+      }
+      if (resolvedWage !== undefined) {
+        fields.push('wage = ?');
+        params.push(parseFloat(resolvedWage) || 0);
+      }
+      if (resolvedStructureId !== undefined) {
+        fields.push('salary_structure_id = ?');
+        params.push(resolvedStructureId || null);
+      }
+      if (resolvedScheduleId !== undefined) {
+        fields.push('working_schedule_id = ?');
+        params.push(resolvedScheduleId || null);
+      }
+      if (startDate !== undefined) {
+        fields.push('start_date = ?');
+        params.push(startDate || null);
+      }
+      if (endDate !== undefined) {
+        fields.push('end_date = ?');
+        params.push(endDate ? endDate : null);
+      }
+      if (normalizedStatus !== undefined) {
+        fields.push('status = ?');
+        params.push(normalizedStatus);
+      }
+
+      if (fields.length > 0) {
+        fields.push('updated_at = NOW()');
+        params.push(id);
+        await query(`UPDATE contracts SET ${fields.join(', ')} WHERE id = ?`, params);
+      }
 
       return sendSuccess(res, 'Contract updated successfully');
     } catch (error) {
@@ -290,6 +367,10 @@ class ContractController {
    */
   async deleteContract(req, res, next) {
     try {
+      if (req.user.role === 'EMPLOYEE') {
+        return sendError(res, 'Forbidden: Employees are not permitted to delete contracts.', 403);
+      }
+
       const { id } = req.params;
       await query('DELETE FROM contracts WHERE id = ?', [id]);
       return sendSuccess(res, 'Contract deleted successfully');

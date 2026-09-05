@@ -132,12 +132,18 @@ export const updateEmployee = async (id, data) => {
 export const deleteEmployee = async (id) => {
   try {
     const res = await employeeService.deleteEmployee(id);
-    await fetchEmployeesAsync();
+    const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== String(id));
+    saveEmployeesToStorage(list);
+    await fetchEmployeesAsync().catch(console.error);
     return res;
   } catch (err) {
-    console.error('Delete employee failed on backend:', err.message);
-    const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== id);
-    saveEmployeesToStorage(list);
-    return true;
+    const errMsg = err.response?.data?.message || err.message || 'Failed to delete employee';
+    console.error('Delete employee failed on backend:', errMsg);
+    if (err.response?.status === 404) {
+      const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== String(id));
+      saveEmployeesToStorage(list);
+      return true;
+    }
+    throw new Error(errMsg);
   }
 };

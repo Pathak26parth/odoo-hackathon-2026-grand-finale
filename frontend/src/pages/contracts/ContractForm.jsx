@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, AlertTriangle, Info, Check, FileText } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, Info, Check, FileText, ShieldCheck } from 'lucide-react';
 import {
   getContractById,
   fetchContractByIdAsync,
@@ -11,11 +11,22 @@ import {
 import { getSalaryStructures, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
 import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
+import { useAuth } from '../../context/AuthContext';
 
 export const ContractForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const isCreate = !id || id === 'new';
+
+  const isManagerOrAdmin =
+    currentUser?.role === 'Admin' ||
+    currentUser?.role === 'HR Manager' ||
+    currentUser?.role === 'HR Payroll Manager' ||
+    currentUser?.roleRaw === 'ADMIN' ||
+    currentUser?.roleRaw === 'HR_MANAGER' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+  const isEmployeeOnly = !isManagerOrAdmin;
 
   const [employees, setEmployees] = useState([]);
   const [availableStructures, setAvailableStructures] = useState([]);
@@ -45,9 +56,12 @@ export const ContractForm = () => {
       startDate: existing.startDate ? String(existing.startDate).split('T')[0] : '',
       endDate: existing.endDate ? String(existing.endDate).split('T')[0] : '',
       department: existing.department || '',
+      departmentId: existing.departmentId || null,
       position: existing.position || '',
       wage: existing.wage !== undefined && existing.wage !== null ? existing.wage : '',
-      salaryStructure: existing.salaryStructure || existing.salaryStructureName || '',
+      salaryStructure: existing.structure || existing.salaryStructure || existing.salaryStructureName || '',
+      salaryStructureId: existing.salaryStructureId || null,
+      workingScheduleId: existing.workingScheduleId || 1,
       status: existing.status || 'Active',
       notes: existing.notes || ''
     });
@@ -105,9 +119,16 @@ export const ContractForm = () => {
     }
   }, [id, isCreate]);
 
+  // If a regular employee attempts to access the create contract form, redirect them
+  useEffect(() => {
+    if (isEmployeeOnly && isCreate) {
+      navigate('/contracts', { replace: true });
+    }
+  }, [isEmployeeOnly, isCreate, navigate]);
+
   // Check client-side overlap warning whenever employeeId, status, or date range changes
   useEffect(() => {
-    if (formData.employeeId && formData.status === 'Active') {
+    if (!isEmployeeOnly && formData.employeeId && formData.status === 'Active') {
       const overlapping = checkContractOverlap(
         formData.employeeId,
         formData.startDate,
@@ -118,7 +139,7 @@ export const ContractForm = () => {
     } else {
       setOverlapWarning(null);
     }
-  }, [formData.employeeId, formData.startDate, formData.endDate, formData.status, isCreate, id]);
+  }, [formData.employeeId, formData.startDate, formData.endDate, formData.status, isCreate, id, isEmployeeOnly]);
 
   const handleEmployeeChange = (empId) => {
     const matched = employees.find((e) => e.id === empId);
@@ -146,6 +167,7 @@ export const ContractForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isEmployeeOnly) return;
     if (!validate()) return;
 
     setSubmitting(true);
@@ -160,7 +182,7 @@ export const ContractForm = () => {
 
       setTimeout(() => {
         navigate('/contracts');
-      }, 900);
+      }, 800);
     } catch (err) {
       alert('Error saving contract: ' + err.message);
       setSubmitting(false);
@@ -186,11 +208,13 @@ export const ContractForm = () => {
 
       {/* Page Header */}
       <PageHeader
-        title={isCreate ? 'New Contract' : 'Contract Details'}
+        title={isEmployeeOnly ? 'My Employment Contract' : (isCreate ? 'New Contract' : 'Contract Details')}
         subtitle={
-          isCreate
-            ? 'Establish new employment terms and salary structure'
-            : `${formData.employeeName} (${id})`
+          isEmployeeOnly
+            ? `${formData.employeeName || 'Employee'} • ${formData.position || 'Staff'} (${id})`
+            : (isCreate
+                ? 'Establish new employment terms and salary structure'
+                : `${formData.employeeName} (${id})`)
         }
       >
         <button
@@ -199,26 +223,38 @@ export const ContractForm = () => {
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Cancel
+          {isEmployeeOnly ? 'Back to Contracts' : 'Cancel'}
         </button>
       </PageHeader>
 
-      {/* Informational Business Rule Notice */}
-      <div className="flex items-start gap-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
-        <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-        <span className="leading-relaxed">
-          <strong>Business Rule:</strong> Payroll uses the contract applicable to the selected payroll period.
-        </span>
-      </div>
+      {/* Informational Notice */}
+      {isEmployeeOnly ? (
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 shadow-2xs">
+          <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div>
+            <h4 className="font-bold text-sm">Official Employment Agreement (Read-Only)</h4>
+            <p className="text-emerald-700 text-xs mt-0.5">
+              This is your verified employment contract on record with Human Resources & Payroll. Contract terms, wage structures, and work schedules can only be modified by authorized HR administrators.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <span className="leading-relaxed">
+            <strong>Business Rule:</strong> At any time, an employee can only have <strong>one active contract</strong>. Activating this contract will automatically mark any existing active contract for this employee as Expired.
+          </span>
+        </div>
+      )}
 
-      {/* Overlap Validation Warning Banner */}
-      {overlapWarning && (
+      {/* Overlap Validation Warning Banner (HR/Admin only) */}
+      {!isEmployeeOnly && overlapWarning && (
         <div className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 shadow-2xs">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold">Active Contract Overlap Warning</p>
+            <p className="font-bold">Active Contract Overlap Notice</p>
             <p className="mt-0.5 leading-relaxed text-[11px]">
-              This employee already has an active contract (<strong>{overlapWarning.id}</strong>: {overlapWarning.startDate} to {overlapWarning.endDate || 'Present'}) for an overlapping period.
+              This employee currently has an active contract (<strong>{overlapWarning.id}</strong>). Saving this contract as Active will automatically transition the older contract to Expired.
             </p>
           </div>
         </div>
@@ -241,7 +277,8 @@ export const ContractForm = () => {
                 <select
                   value={formData.employeeId}
                   onChange={(e) => handleEmployeeChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 >
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
@@ -262,7 +299,8 @@ export const ContractForm = () => {
                   type="text"
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -274,7 +312,8 @@ export const ContractForm = () => {
                   type="text"
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -285,7 +324,8 @@ export const ContractForm = () => {
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 >
                   <option value="Active">Active</option>
                   <option value="Draft">Draft</option>
@@ -310,7 +350,8 @@ export const ContractForm = () => {
                   type="date"
                   value={formData.startDate}
                   onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
                 {errors.startDate && (
                   <p className="mt-1 text-[11px] text-rose-600">{errors.startDate}</p>
@@ -325,7 +366,8 @@ export const ContractForm = () => {
                   type="date"
                   value={formData.endDate}
                   onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -349,7 +391,8 @@ export const ContractForm = () => {
                     min="1"
                     value={formData.wage}
                     onChange={(e) => setFormData({ ...formData, wage: e.target.value })}
-                    className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    disabled={isEmployeeOnly}
+                    className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                   />
                 </div>
                 {errors.wage && (
@@ -364,7 +407,8 @@ export const ContractForm = () => {
                 <select
                   value={formData.salaryStructure}
                   onChange={(e) => setFormData({ ...formData, salaryStructure: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={isEmployeeOnly}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 >
                   {salaryStructures.map((struct) => (
                     <option key={struct} value={struct}>
@@ -381,21 +425,34 @@ export const ContractForm = () => {
 
           {/* Action Buttons */}
           <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => navigate('/contracts')}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
-            >
-              <Save className="w-3.5 h-3.5" />
-              Save Contract
-            </button>
+            {isEmployeeOnly ? (
+              <button
+                type="button"
+                onClick={() => navigate('/contracts')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to Contracts
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => navigate('/contracts')}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  Save Contract
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

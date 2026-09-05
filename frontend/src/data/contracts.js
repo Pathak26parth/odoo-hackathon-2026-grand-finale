@@ -76,10 +76,7 @@ export const createContract = async (data) => {
     return res;
   } catch (err) {
     console.error('Create contract failed on backend:', err.message);
-    const list = getContracts();
-    const newCtr = { id: String(Date.now()), ...data };
-    saveContractsToStorage([newCtr, ...list]);
-    return newCtr;
+    throw err;
   }
 };
 
@@ -90,13 +87,7 @@ export const updateContract = async (id, data) => {
     return res;
   } catch (err) {
     console.error('Update contract failed on backend:', err.message);
-    const list = getContracts();
-    const idx = list.findIndex((c) => String(c.id) === String(id) || c.reference === id);
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], ...data };
-      saveContractsToStorage(list);
-    }
-    return data;
+    throw err;
   }
 };
 
@@ -107,8 +98,6 @@ export const deleteContract = async (id) => {
     return res;
   } catch (err) {
     console.error('Delete contract failed on backend:', err.message);
-    const list = getContracts().filter((c) => String(c.id) !== String(id) && c.reference !== id);
-    saveContractsToStorage(list);
-    return true;
+    throw err;
   }
 };

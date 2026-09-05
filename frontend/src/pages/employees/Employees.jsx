@@ -34,6 +34,7 @@ export const Employees = () => {
   const [deptFilter, setDeptFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
+  const [toastMessage, setToastMessage] = useState('');
   const pageSize = 8;
 
   useEffect(() => {
@@ -52,20 +53,31 @@ export const Employees = () => {
   };
 
   const handleDeleteEmployee = async (e, emp) => {
-    e.stopPropagation();
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.employeeId || 'this employee';
-    if (!window.confirm(`Are you sure you want to delete ${empName} (${emp.employeeId})?\n\nThis will permanently remove the employee record, linked user account, contracts, and attendance history.`)) {
+    const targetId = emp.id || emp.internalId || emp.employeeId;
+
+    if (String(targetId) === '1' || emp.employeeId === 'EMP-001') {
+      alert('Safety lock: Primary System Administrator profile cannot be deleted.');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${empName} (${emp.employeeId || targetId})?\n\nThis will permanently remove the employee record, linked user account, contracts, and send a termination notice email.`)) {
       return;
     }
 
     try {
-      await deleteEmployee(emp.id);
-      setEmployees((prev) => prev.filter((item) => String(item.id) !== String(emp.id)));
+      await deleteEmployee(targetId);
+      setEmployees((prev) => prev.filter((item) => String(item.id) !== String(targetId) && item.employeeId !== emp.employeeId));
+      setToastMessage(`Employee "${empName}" deleted successfully. Official termination notice dispatched.`);
+      setTimeout(() => setToastMessage(''), 5000);
       fetchEmployeesAsync().then((list) => {
         if (Array.isArray(list)) setEmployees(list);
       }).catch(console.error);
     } catch (err) {
-      alert('Error deleting employee: ' + err.message);
+      alert('Error deleting employee: ' + (err.message || 'Failed to delete'));
     }
   };
 
@@ -168,30 +180,42 @@ export const Employees = () => {
       header: 'Action',
       key: 'action',
       align: 'right',
-      render: (row) => (
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            onClick={() => navigate(`/employees/${row.id}`)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
-          >
-            View
-          </button>
-          {isHRorAdmin && (
+      render: (row) => {
+        const name = row.name || `${row.firstName || ''} ${row.lastName || ''}`.trim() || 'Employee';
+        const isMasterAdmin = String(row.id) === '1' || row.employeeId === 'EMP-001';
+        return (
+          <div className="flex items-center justify-end gap-1.5">
             <button
-              onClick={(e) => handleDeleteEmployee(e, row)}
-              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-              title="Delete Employee"
+              onClick={() => navigate(`/employees/${row.id}`)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              View
             </button>
-          )}
-        </div>
-      )
+            {isHRorAdmin && !isMasterAdmin && (
+              <button
+                onClick={(e) => handleDeleteEmployee(e, row)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-lg transition-colors"
+                title={`Delete ${name}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            )}
+          </div>
+        );
+      }
     }
   ];
 
   return (
     <div className="space-y-5">
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-lg shadow-sm animate-in fade-in slide-in-from-top-1">
+          <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* Page Header with Add Employee & View Toggle */}
       <PageHeader
@@ -308,12 +332,13 @@ export const Employees = () => {
             const manager = emp.manager || emp.managerName || 'None';
             const avatar = emp.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80';
             const status = emp.status || 'Active';
+            const isMasterAdmin = String(emp.id) === '1' || emp.employeeId === 'EMP-001';
 
             return (
               <div
                 key={emp.id}
                 onClick={() => handleCardClick(emp)}
-                className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between text-xs"
+                className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between text-xs relative"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-3">
@@ -322,14 +347,14 @@ export const Employees = () => {
                       alt={name}
                       className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-2xs"
                     />
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <StatusBadge status={status} />
-                      {isHRorAdmin && (
+                      {isHRorAdmin && !isMasterAdmin && (
                         <button
                           type="button"
                           onClick={(e) => handleDeleteEmployee(e, emp)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                          title="Delete Employee"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-100 hover:border-rose-200 rounded-lg transition-all"
+                          title={`Delete ${name}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -372,9 +397,22 @@ export const Employees = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-blue-600 font-semibold group-hover:translate-x-0.5 transition-transform">
-                  <span>View Profile</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
+                <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <span className="text-blue-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                    View Profile
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </span>
+                  {isHRorAdmin && !isMasterAdmin && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteEmployee(e, emp)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-md transition-colors"
+                      title={`Delete ${name}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             );
