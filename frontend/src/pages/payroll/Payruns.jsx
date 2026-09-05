@@ -50,7 +50,7 @@ export const Payruns = () => {
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.runCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       structName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStructure = structureFilter === 'All' || structName === structureFilter;
+    const matchesStructure = structureFilter === 'All' || structName.toLowerCase() === structureFilter.toLowerCase();
     const matchesStatus = statusFilter === 'All' || p.status?.toUpperCase() === statusFilter.toUpperCase();
     return matchesSearch && matchesStructure && matchesStatus;
   });

@@ -3,8 +3,14 @@ import React from 'react';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 export const SalaryBreakdown = ({ basic = 0, allowances = 0, gross = 0, deductions = 0, net = 0, lines = [] }) => {
-  const earningsRules = lines.filter((l) => l.category === 'Basic' || l.category === 'Allowances');
-  const deductionsRules = lines.filter((l) => l.category === 'Deductions');
+  const earningsRules = lines.filter(
+    (l) =>
+      (l.category || '').toUpperCase().startsWith('BASIC') ||
+      (l.category || '').toUpperCase().startsWith('ALLOW')
+  );
+  const deductionsRules = lines.filter(
+    (l) => (l.category || '').toUpperCase().startsWith('DEDUC')
+  );
 
   return (
     <div className="space-y-6">
@@ -21,8 +27,8 @@ export const SalaryBreakdown = ({ basic = 0, allowances = 0, gross = 0, deductio
               earningsRules.map((rule, idx) => (
                 <div key={idx} className="py-2.5 flex items-center justify-between">
                   <div>
-                    <span className="font-semibold text-slate-800">{rule.name}</span>
-                    <span className="text-[11px] text-slate-400 block">{rule.calculation}</span>
+                    <span className="font-semibold text-slate-800">{rule.name || rule.rule_name}</span>
+                    <span className="text-[11px] text-slate-400 block font-mono">{rule.calculation || rule.code || rule.rule_code}</span>
                   </div>
                   <span className="font-mono font-medium text-slate-900">
                     {formatCurrency(rule.amount)}
@@ -61,8 +67,8 @@ export const SalaryBreakdown = ({ basic = 0, allowances = 0, gross = 0, deductio
               deductionsRules.map((rule, idx) => (
                 <div key={idx} className="py-2.5 flex items-center justify-between">
                   <div>
-                    <span className="font-semibold text-slate-800">{rule.name}</span>
-                    <span className="text-[11px] text-slate-400 block">{rule.calculation}</span>
+                    <span className="font-semibold text-slate-800">{rule.name || rule.rule_name}</span>
+                    <span className="text-[11px] text-slate-400 block font-mono">{rule.calculation || rule.code || rule.rule_code}</span>
                   </div>
                   <span className="font-mono font-medium text-rose-600">
                     {formatCurrency(rule.amount)}

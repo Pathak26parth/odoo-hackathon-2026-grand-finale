@@ -2,6 +2,8 @@ import api from './api';
 
 export function normalizeStructure(s) {
   if (!s) return null;
+  const count = s.rules_count ?? s.ruleCount ?? s.rules?.length ?? 0;
+  const employees = s.active_employees_count ?? s.assignedEmployees ?? 0;
   return {
     ...s,
     id: String(s.id),
@@ -10,13 +12,26 @@ export function normalizeStructure(s) {
     description: s.description || '',
     currency: s.currency || 'INR',
     status: s.status || 'Active',
-    rulesCount: s.rules?.length || s.rules_count || 0,
+    ruleCount: count,
+    rulesCount: count,
+    assignedEmployees: employees,
     rules: s.rules || []
   };
 }
 
 export function normalizeRule(r) {
   if (!r) return null;
+  const val = parseFloat(r.value || 0);
+  const compType = (r.computation_type || r.computationType || 'FIXED').toUpperCase();
+  let valueDisplay = '—';
+  if (r.formula) {
+    valueDisplay = r.formula;
+  } else if (compType === 'PERCENTAGE') {
+    valueDisplay = `${val}% of ${r.percentage_basis || r.percentageBasis || 'Base'}`;
+  } else if (compType === 'FIXED') {
+    valueDisplay = `₹${val.toLocaleString()}`;
+  }
+
   return {
     ...r,
     id: String(r.id),
@@ -24,8 +39,10 @@ export function normalizeRule(r) {
     code: r.code,
     category: r.category,
     sequence: r.sequence || 1,
-    computationType: r.computation_type || r.computationType || 'FIXED',
-    value: parseFloat(r.value || 0),
+    computationType: compType,
+    value: val,
+    amount: val,
+    valueDisplay,
     percentageBasis: r.percentage_basis || r.percentageBasis || null,
     formula: r.formula || null,
     status: r.status || 'Active'
@@ -37,19 +54,24 @@ export function normalizePayrun(pr) {
   const start = pr.period_start ? pr.period_start.split('T')[0] : '';
   const end = pr.period_end ? pr.period_end.split('T')[0] : '';
   const periodLabel = start && end ? `${start} to ${end}` : (pr.name || 'Payrun');
+  const count = pr.employee_count !== undefined ? pr.employee_count : (pr.payslips_count ?? (pr.payslips ? pr.payslips.length : 0));
+  const rawStatus = (pr.status || 'DRAFT').toUpperCase();
+  const structName = pr.structure_name || pr.salary_structure_name || pr.structure || 'Standard Salary Structure';
 
   return {
     ...pr,
     id: String(pr.id),
     runCode: pr.run_code || `PAYRUN-${pr.id}`,
-    name: pr.name || `Payroll Run ${pr.run_code}`,
+    name: pr.name || `Payroll Run ${pr.run_code || pr.id}`,
     period: periodLabel,
     periodStart: start,
     periodEnd: end,
-    structure: pr.structure_name || pr.structure || 'Standard Salary Structure',
+    structure: structName,
+    salaryStructureName: structName,
     structureId: pr.salary_structure_id || pr.structureId || 1,
-    status: (pr.status || 'DRAFT').toUpperCase(),
-    payslipsCount: pr.payslips_count || (pr.payslips ? pr.payslips.length : 0),
+    status: rawStatus,
+    employeeCount: count,
+    payslipsCount: count,
     totalGross: parseFloat(pr.total_gross || 0),
     totalDeductions: parseFloat(pr.total_deductions || 0),
     totalNet: parseFloat(pr.total_net || 0),
@@ -64,10 +86,19 @@ export function normalizePayslip(ps) {
   const lastName = ps.last_name || '';
   const empName = ps.employee_name || `${firstName} ${lastName}`.trim() || 'Employee';
 
+  const gross = parseFloat(ps.gross_amount ?? ps.gross_salary ?? ps.gross ?? 0);
+  const deductions = parseFloat(ps.deduction_amount ?? ps.total_deductions ?? ps.deductions ?? 0);
+  const net = parseFloat(ps.net_amount ?? ps.net_salary ?? ps.net ?? 0);
+  const basic = parseFloat(ps.contract_wage ?? ps.basic_wage ?? ps.basic ?? (gross > 0 ? gross * 0.5 : 0));
+  const allowances = Math.max(0, gross - basic);
+  const rawStatus = (ps.payment_status || ps.status || 'DRAFT').toUpperCase();
+  const slipCode = ps.payslip_code || ps.slip_number || `PS-${ps.id}`;
+
   return {
     ...ps,
     id: String(ps.id),
-    slipNumber: ps.slip_number || `SLIP-${ps.id}`,
+    slipNumber: slipCode,
+    payslipCode: slipCode,
     payrunId: String(ps.payrun_id || ps.payrunId || ''),
     payrunName: ps.payrun_name || ps.run_name || 'Payroll Batch',
     employeeId: ps.employee_code || String(ps.employee_id || ''),
@@ -80,13 +111,15 @@ export function normalizePayslip(ps) {
     period: ps.period_start && ps.period_end ? `${ps.period_start.split('T')[0]} to ${ps.period_end.split('T')[0]}` : 'Current Period',
     periodStart: ps.period_start ? ps.period_start.split('T')[0] : '',
     periodEnd: ps.period_end ? ps.period_end.split('T')[0] : '',
-    basic: parseFloat(ps.basic_wage || ps.basic || 0),
-    gross: parseFloat(ps.gross_salary || ps.gross || 0),
-    deductions: parseFloat(ps.total_deductions || ps.deductions || 0),
-    net: parseFloat(ps.net_salary || ps.net || 0),
-    status: (ps.status || 'DRAFT').toUpperCase(),
-    workedDays: parseFloat(ps.worked_days || 30),
-    totalDaysInPeriod: ps.total_days_in_period || 30,
+    basic,
+    allowances,
+    gross,
+    deductions,
+    net,
+    status: rawStatus,
+    paymentStatus: rawStatus,
+    workedDays: parseFloat(ps.worked_days !== undefined ? ps.worked_days : 30),
+    totalDaysInPeriod: ps.total_working_days || ps.total_days_in_period || 30,
     lines: ps.lines || []
   };
 }

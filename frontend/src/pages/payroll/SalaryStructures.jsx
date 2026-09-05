@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Layers, Check, ShieldAlert } from 'lucide-react';
 import { getSalaryStructures, deleteSalaryStructure, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
 import { useAuth } from '../../context/AuthContext';
+import { canView, canEdit, MODULES } from '../../utils/permissionUtils';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { SalaryStructureTable } from '../../components/payroll/SalaryStructureTable';
@@ -13,8 +14,8 @@ export const SalaryStructures = () => {
   const { currentUser, isHRorAdmin } = useAuth();
 
   const role = currentUser?.role || 'Admin';
-  const hasAccess = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User';
-  const canManage = role === 'Admin' || role === 'HR Payroll Manager';
+  const hasAccess = canView(role, MODULES.SALARY_STRUCTURES);
+  const canManage = canEdit(role, MODULES.SALARY_STRUCTURES);
 
   const [structures, setStructures] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');

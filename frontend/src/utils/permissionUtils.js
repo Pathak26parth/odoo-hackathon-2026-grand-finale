@@ -29,13 +29,25 @@ export const MODULES = {
   ROLES: 'roles'
 };
 
+export function normalizeRoleKey(role) {
+  if (!role) return '';
+  const clean = String(role).toUpperCase().replace(/\s+/g, '_');
+  if (clean === 'ADMIN') return 'ADMIN';
+  if (clean === 'HR_PAYROLL_ADMIN' || clean === 'HR_PAYROLL_MANAGER') return 'HR_PAYROLL_MANAGER';
+  if (clean === 'HR_PAYROLL_USER') return 'HR_PAYROLL_USER';
+  if (clean === 'HR_MANAGER') return 'HR_MANAGER';
+  if (clean === 'EMPLOYEE') return 'EMPLOYEE';
+  return clean;
+}
+
 export const canView = (role, module) => {
-  if (!role) return false;
-  if (role === ROLES.ADMIN) return true;
+  const r = normalizeRoleKey(role);
+  if (!r) return false;
+  if (r === 'ADMIN') return true;
 
   switch (module) {
     case MODULES.DASHBOARD:
-      return role === ROLES.ADMIN || role === ROLES.HR_PAYROLL_MANAGER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 
     case MODULES.EMPLOYEES:
       // Employee only views own profile; HR roles & admin view all
@@ -43,29 +55,29 @@ export const canView = (role, module) => {
 
     case MODULES.CONTRACTS:
     case MODULES.WORKING_SCHEDULES:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.ATTENDANCE:
       return true;
 
     case MODULES.FACE_REGISTRATION:
     case MODULES.FACE_HISTORY:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.TIME_OFF_REQUESTS:
     case MODULES.TIME_OFF_ALLOCATIONS:
       return true;
 
     case MODULES.TIME_OFF_TYPES:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.SALARY_STRUCTURES:
     case MODULES.SALARY_RULES:
     case MODULES.PAYRUNS:
       return (
-        role === ROLES.ADMIN ||
-        role === ROLES.HR_PAYROLL_MANAGER ||
-        role === ROLES.HR_PAYROLL_USER
+        r === 'ADMIN' ||
+        r === 'HR_PAYROLL_MANAGER' ||
+        r === 'HR_PAYROLL_USER'
       );
 
     case MODULES.PAYSLIPS:
@@ -73,11 +85,11 @@ export const canView = (role, module) => {
       return true;
 
     case MODULES.REPORTS:
-      return role === ROLES.ADMIN || role === ROLES.HR_PAYROLL_MANAGER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 
     case MODULES.USERS:
     case MODULES.ROLES:
-      return role === ROLES.ADMIN;
+      return r === 'ADMIN';
 
     default:
       return false;
@@ -85,8 +97,9 @@ export const canView = (role, module) => {
 };
 
 export const canCreate = (role, module) => {
-  if (!role) return false;
-  if (role === ROLES.ADMIN) return true;
+  const r = normalizeRoleKey(role);
+  if (!r) return false;
+  if (r === 'ADMIN') return true;
 
   switch (module) {
     case MODULES.EMPLOYEES:
@@ -94,26 +107,26 @@ export const canCreate = (role, module) => {
     case MODULES.WORKING_SCHEDULES:
     case MODULES.ATTENDANCE:
     case MODULES.FACE_REGISTRATION:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.TIME_OFF_REQUESTS:
       return true; // All can request time off
 
     case MODULES.TIME_OFF_ALLOCATIONS:
     case MODULES.TIME_OFF_TYPES:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.SALARY_STRUCTURES:
     case MODULES.SALARY_RULES:
-      return role === ROLES.HR_PAYROLL_MANAGER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 
     case MODULES.PAYRUNS:
     case MODULES.PAYSLIPS:
-      return role === ROLES.HR_PAYROLL_MANAGER || role === ROLES.HR_PAYROLL_USER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_PAYROLL_USER';
 
     case MODULES.USERS:
     case MODULES.ROLES:
-      return role === ROLES.ADMIN;
+      return r === 'ADMIN';
 
     default:
       return false;
@@ -121,8 +134,9 @@ export const canCreate = (role, module) => {
 };
 
 export const canEdit = (role, module) => {
-  if (!role) return false;
-  if (role === ROLES.ADMIN) return true;
+  const r = normalizeRoleKey(role);
+  if (!r) return false;
+  if (r === 'ADMIN') return true;
 
   switch (module) {
     case MODULES.EMPLOYEES:
@@ -131,20 +145,18 @@ export const canEdit = (role, module) => {
     case MODULES.ATTENDANCE:
     case MODULES.TIME_OFF_ALLOCATIONS:
     case MODULES.TIME_OFF_TYPES:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.TIME_OFF_REQUESTS:
       return true;
 
     case MODULES.SALARY_STRUCTURES:
     case MODULES.SALARY_RULES:
-      return role === ROLES.HR_PAYROLL_MANAGER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 
     case MODULES.PAYRUNS:
-      return role === ROLES.HR_PAYROLL_MANAGER || role === ROLES.HR_PAYROLL_USER;
-
     case MODULES.PAYSLIPS:
-      return role === ROLES.HR_PAYROLL_MANAGER || role === ROLES.HR_PAYROLL_USER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_PAYROLL_USER';
 
     default:
       return false;
@@ -152,8 +164,9 @@ export const canEdit = (role, module) => {
 };
 
 export const canDelete = (role, module) => {
-  if (!role) return false;
-  if (role === ROLES.ADMIN) return true;
+  const r = normalizeRoleKey(role);
+  if (!r) return false;
+  if (r === 'ADMIN') return true;
 
   switch (module) {
     case MODULES.EMPLOYEES:
@@ -162,7 +175,7 @@ export const canDelete = (role, module) => {
     case MODULES.ATTENDANCE:
     case MODULES.TIME_OFF_ALLOCATIONS:
     case MODULES.TIME_OFF_TYPES:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.TIME_OFF_REQUESTS:
       return true;
@@ -170,7 +183,7 @@ export const canDelete = (role, module) => {
     case MODULES.SALARY_STRUCTURES:
     case MODULES.SALARY_RULES:
     case MODULES.PAYRUNS:
-      return role === ROLES.HR_PAYROLL_MANAGER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 
     default:
       return false;
@@ -178,15 +191,16 @@ export const canDelete = (role, module) => {
 };
 
 export const canApprove = (role, module) => {
-  if (!role) return false;
-  if (role === ROLES.ADMIN) return true;
+  const r = normalizeRoleKey(role);
+  if (!r) return false;
+  if (r === 'ADMIN') return true;
 
   switch (module) {
     case MODULES.TIME_OFF_REQUESTS:
-      return role !== ROLES.EMPLOYEE;
+      return r !== 'EMPLOYEE';
 
     case MODULES.PAYRUNS:
-      return role === ROLES.HR_PAYROLL_MANAGER;
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 
     default:
       return false;
@@ -194,13 +208,15 @@ export const canApprove = (role, module) => {
 };
 
 export const canAccessPayroll = (role) => {
+  const r = normalizeRoleKey(role);
   return (
-    role === ROLES.ADMIN ||
-    role === ROLES.HR_PAYROLL_MANAGER ||
-    role === ROLES.HR_PAYROLL_USER
+    r === 'ADMIN' ||
+    r === 'HR_PAYROLL_MANAGER' ||
+    r === 'HR_PAYROLL_USER'
   );
 };
 
 export const canMarkPaidAndSend = (role) => {
-  return role === ROLES.ADMIN || role === ROLES.HR_PAYROLL_MANAGER;
+  const r = normalizeRoleKey(role);
+  return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
 };

@@ -60,6 +60,7 @@ export const Payslips = () => {
       case 'VALIDATED':
         return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'COMPUTED':
+      case 'UNPAID':
         return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'DRAFT':
       default:
@@ -71,10 +72,14 @@ export const Payslips = () => {
     const matchesSearch =
       slip.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       slip.slipNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      slip.payslipCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       slip.department?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesPayrun = payrunFilter === 'All' || String(slip.payrunId) === String(payrunFilter);
-    const matchesStatus = statusFilter === 'All' || slip.status?.toUpperCase() === statusFilter.toUpperCase();
+    const matchesStatus =
+      statusFilter === 'All' ||
+      slip.status?.toUpperCase() === statusFilter.toUpperCase() ||
+      (statusFilter.toUpperCase() === 'DRAFT' && slip.status?.toUpperCase() === 'UNPAID');
     const matchesEmployee =
       employeeFilter === 'All' ||
       String(slip.employeeId) === String(employeeFilter) ||

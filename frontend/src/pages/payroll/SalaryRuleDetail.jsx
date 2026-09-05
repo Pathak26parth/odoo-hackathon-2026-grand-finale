@@ -8,6 +8,7 @@ import {
 } from '../../data/salaryRules';
 import payrollService from '../../services/payrollService';
 import { useAuth } from '../../context/AuthContext';
+import { canView, canEdit, MODULES } from '../../utils/permissionUtils';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SalaryRuleForm } from '../../components/payroll/SalaryRuleForm';
 import { SalaryCalculationPreview } from '../../components/payroll/SalaryCalculationPreview';
@@ -19,8 +20,8 @@ export const SalaryRuleDetail = () => {
 
   const { currentUser } = useAuth();
   const role = currentUser?.role || 'Admin';
-  const hasAccess = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User';
-  const canManage = role === 'Admin' || role === 'HR Payroll Manager';
+  const hasAccess = canView(role, MODULES.SALARY_RULES);
+  const canManage = canEdit(role, MODULES.SALARY_RULES);
 
   const [ruleData, setRuleData] = useState(null);
   const [toastMessage, setToastMessage] = useState('');

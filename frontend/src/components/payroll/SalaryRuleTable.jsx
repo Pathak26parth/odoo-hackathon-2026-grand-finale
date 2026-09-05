@@ -16,14 +16,23 @@ export const SalaryRuleTable = ({
   canManage = true
 }) => {
   const getComputationBadge = (type) => {
+    const t = (type || '').toUpperCase();
     let color = 'bg-slate-100 text-slate-700 border-slate-200';
-    if (type === 'Percentage') color = 'bg-amber-50 text-amber-700 border-amber-200';
-    if (type === 'Formula') color = 'bg-purple-50 text-purple-700 border-purple-200';
-    if (type === 'Fixed Amount') color = 'bg-blue-50 text-blue-700 border-blue-200';
+    let label = type || 'Fixed';
+    if (t === 'PERCENTAGE') {
+      color = 'bg-amber-50 text-amber-700 border-amber-200';
+      label = 'Percentage';
+    } else if (t === 'FORMULA') {
+      color = 'bg-purple-50 text-purple-700 border-purple-200';
+      label = 'Formula';
+    } else if (t === 'FIXED' || t === 'FIXED AMOUNT') {
+      color = 'bg-blue-50 text-blue-700 border-blue-200';
+      label = 'Fixed Amount';
+    }
 
     return (
       <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${color}`}>
-        {type}
+        {label}
       </span>
     );
   };

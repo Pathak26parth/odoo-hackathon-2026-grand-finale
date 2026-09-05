@@ -42,7 +42,7 @@ export const SalaryStructureTable = ({
       render: (row) => (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
           <SlidersHorizontal className="w-3 h-3 text-slate-500" />
-          {row.ruleCount ?? row.ruleIds?.length ?? 0} Rules
+          {row.ruleCount ?? row.rulesCount ?? row.rules?.length ?? row.ruleIds?.length ?? 0} Rules
         </span>
       )
     },
@@ -53,7 +53,7 @@ export const SalaryStructureTable = ({
       render: (row) => (
         <span className="inline-flex items-center gap-1.5 text-slate-700 font-semibold text-xs">
           <Users className="w-3.5 h-3.5 text-slate-400" />
-          {row.assignedEmployees ?? 0} Staff
+          {row.assignedEmployees ?? row.active_employees_count ?? 0} Staff
         </span>
       )
     },

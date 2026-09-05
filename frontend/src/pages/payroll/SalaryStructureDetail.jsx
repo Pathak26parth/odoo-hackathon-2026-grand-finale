@@ -9,6 +9,7 @@ import {
 import { getSalaryRules } from '../../data/salaryRules';
 import payrollService from '../../services/payrollService';
 import { useAuth } from '../../context/AuthContext';
+import { canView, canEdit, MODULES } from '../../utils/permissionUtils';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SalaryStructureForm } from '../../components/payroll/SalaryStructureForm';
 
@@ -19,8 +20,8 @@ export const SalaryStructureDetail = () => {
 
   const { currentUser } = useAuth();
   const role = currentUser?.role || 'Admin';
-  const hasAccess = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User';
-  const canManage = role === 'Admin' || role === 'HR Payroll Manager';
+  const hasAccess = canView(role, MODULES.SALARY_STRUCTURES);
+  const canManage = canEdit(role, MODULES.SALARY_STRUCTURES);
 
   const [structure, setStructure] = useState(null);
   const [availableRules, setAvailableRules] = useState([]);

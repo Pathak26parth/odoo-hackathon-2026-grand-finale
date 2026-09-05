@@ -110,6 +110,7 @@ export const PayslipDetail = () => {
       case 'VALIDATED':
         return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'COMPUTED':
+      case 'UNPAID':
         return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'DRAFT':
       default:
