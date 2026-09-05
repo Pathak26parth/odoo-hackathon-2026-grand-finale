@@ -50,14 +50,23 @@ const SYSTEM_ROLES = [
 export const EmployeeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentUser, isEmployeeOnly, isHRorAdmin } = useAuth();
+  const { currentUser, isEmployeeOnly, isHRorAdmin, role } = useAuth();
   const isCreate = !id || id === 'new';
+  const isAdmin = role === 'Admin' || currentUser?.role === 'ADMIN' || currentUser?.role === 'Admin';
 
   // If a non-admin / non-HR employee tries to create a new employee, bounce them to their own profile
   if (isCreate && isEmployeeOnly) {
     const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
     return <Navigate to={`/employees/${ownId}`} replace />;
   }
+
+  // HR Managers cannot assign or create System Administrator accounts
+  const allowedRoles = SYSTEM_ROLES.filter((r) => {
+    if (r.value === 'ADMIN') {
+      return isAdmin;
+    }
+    return true;
+  });
 
   const fileInputRef = useRef(null);
 
@@ -615,7 +624,7 @@ export const EmployeeDetail = () => {
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 className="w-full px-3 py-2.5 border border-blue-200 bg-blue-50/30 rounded-lg text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600"
               >
-                {SYSTEM_ROLES.map((r) => (
+                {allowedRoles.map((r) => (
                   <option key={r.value} value={r.value}>
                     {r.label}
                   </option>
@@ -623,12 +632,12 @@ export const EmployeeDetail = () => {
               </select>
               <div className="mt-1.5 flex items-center gap-2">
                 <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                  SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
+                  allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
                 }`}>
-                  Panel: {SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.panel}
+                  Panel: {allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.panel || 'Standard Portal'}
                 </span>
                 <p className="text-[11px] text-slate-500">
-                  {SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.desc}
+                  {allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.desc}
                 </p>
               </div>
             </div>

@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, AlertCircle, CheckCircle2, Users, Search, Filter } from 'lucide-react';
-import { getSalaryStructures } from '../../data/salaryStructures';
-import { getEmployees } from '../../data/employees';
-import { getContracts } from '../../data/contracts';
+import { getSalaryStructures, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import { getContracts, fetchContractsAsync } from '../../data/contracts';
 import { createPayrun } from '../../data/payruns';
 import { createPayslipsBatch } from '../../data/payslips';
 import { evaluateEmployeeEligibility } from '../../utils/contractUtils';
@@ -24,7 +24,7 @@ export const PayrunWizard = () => {
   // Step 1 Form state
   const [formData, setFormData] = useState({
     name: 'October 2026 Regular Payroll',
-    salaryStructureId: 'struct-1',
+    salaryStructureId: '1',
     periodStart: '2026-10-01',
     periodEnd: '2026-10-31'
   });
@@ -44,9 +44,24 @@ export const PayrunWizard = () => {
     setEmployees(loadedEmployees);
     setContracts(loadedContracts);
 
-    if (loadedStructures.length > 0 && !formData.salaryStructureId) {
+    if (loadedStructures.length > 0) {
       setFormData((prev) => ({ ...prev, salaryStructureId: loadedStructures[0].id }));
     }
+
+    fetchSalaryStructuresAsync().then((list) => {
+      if (Array.isArray(list) && list.length > 0) {
+        setStructures(list);
+        setFormData((prev) => ({ ...prev, salaryStructureId: prev.salaryStructureId || list[0].id }));
+      }
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+
+    fetchContractsAsync().then((list) => {
+      if (Array.isArray(list)) setContracts(list);
+    }).catch(console.error);
   }, []);
 
   const selectedStructure = structures.find((s) => s.id === formData.salaryStructureId);
@@ -132,60 +147,66 @@ export const PayrunWizard = () => {
   };
 
   // Final Payrun Creation
-  const handleCreatePayrun = () => {
-    const chosenStructure = structures.find((s) => s.id === formData.salaryStructureId);
+  const handleCreatePayrun = async () => {
+    try {
+      const chosenStructure = structures.find((s) => s.id === formData.salaryStructureId);
 
-    // Create the Payrun in Draft status
-    const created = createPayrun({
-      name: formData.name,
-      salaryStructureId: formData.salaryStructureId,
-      salaryStructureName: chosenStructure?.name || 'Standard Monthly Salary',
-      periodStart: formData.periodStart,
-      periodEnd: formData.periodEnd,
-      selectedEmployeeIds: selectedEmployees,
-      employeeCount: selectedEmployees.length,
-      warnings: []
-    });
+      // Create the Payrun in Draft status
+      const created = await createPayrun({
+        name: formData.name,
+        salaryStructureId: formData.salaryStructureId,
+        salaryStructureName: chosenStructure?.name || 'Standard Monthly Salary',
+        periodStart: formData.periodStart,
+        periodEnd: formData.periodEnd,
+        selectedEmployeeIds: selectedEmployees,
+        employeeCount: selectedEmployees.length,
+        warnings: []
+      });
 
-    // Generate initial Draft Payslips for the selected employees
-    const initialPayslips = selectedEmployees.map((empId, index) => {
-      const emp = employees.find((e) => e.id === empId);
-      const evalItem = evaluatedEmployees.find((item) => item.employee.id === empId);
-      const wage = Number(evalItem?.contract?.wage) || 0;
+      const newPayrunId = created?.id || created?.payrun?.id || 'new';
 
-      return {
-        id: `slip-${created.id}-${index + 1}`,
-        slipNumber: `SLIP-${created.periodStart.slice(0, 7)}-${String(index + 1).padStart(3, '0')}`,
-        payrunId: created.id,
-        payrunName: created.name,
-        employeeId: emp.id,
-        employeeCode: emp.employeeId,
-        employeeName: emp.name,
-        department: emp.department,
-        position: emp.position,
-        contractId: evalItem?.contract?.id || null,
-        salaryStructureId: created.salaryStructureId,
-        salaryStructureName: created.salaryStructureName,
-        periodStart: created.periodStart,
-        periodEnd: created.periodEnd,
-        period: `${created.periodStart} - ${created.periodEnd}`,
-        workedDays: 22,
-        basic: wage,
-        allowances: 0,
-        gross: wage,
-        deductions: 0,
-        net: wage,
-        status: 'Draft',
-        emailStatus: 'Not Sent',
-        warnings: evalItem?.warning ? [evalItem.warning] : [],
-        lines: []
-      };
-    });
+      // Generate initial Draft Payslips for the selected employees in local cache as well
+      const initialPayslips = selectedEmployees.map((empId, index) => {
+        const emp = employees.find((e) => e.id === empId);
+        const evalItem = evaluatedEmployees.find((item) => item.employee.id === empId);
+        const wage = Number(evalItem?.contract?.wage) || 0;
 
-    createPayslipsBatch(initialPayslips);
+        return {
+          id: `slip-${newPayrunId}-${index + 1}`,
+          slipNumber: `SLIP-${formData.periodStart.slice(0, 7)}-${String(index + 1).padStart(3, '0')}`,
+          payrunId: newPayrunId,
+          payrunName: formData.name,
+          employeeId: emp?.id || empId,
+          employeeCode: emp?.employeeId || `EMP-${empId}`,
+          employeeName: emp?.name || 'Employee',
+          department: emp?.department || 'General',
+          position: emp?.position || 'Staff',
+          contractId: evalItem?.contract?.id || null,
+          salaryStructureId: formData.salaryStructureId,
+          salaryStructureName: chosenStructure?.name || 'Standard Monthly Salary',
+          periodStart: formData.periodStart,
+          periodEnd: formData.periodEnd,
+          period: `${formData.periodStart} - ${formData.periodEnd}`,
+          workedDays: 22,
+          basic: wage,
+          allowances: 0,
+          gross: wage,
+          deductions: 0,
+          net: wage,
+          status: 'Draft',
+          emailStatus: 'Not Sent',
+          warnings: evalItem?.warning ? [evalItem.warning] : [],
+          lines: []
+        };
+      });
 
-    // Navigate to Payrun Detail processing screen
-    navigate(`/payroll/payruns/${created.id}`);
+      await createPayslipsBatch(initialPayslips);
+
+      // Navigate to Payrun Detail processing screen
+      navigate(`/payroll/payruns/${newPayrunId}`);
+    } catch (err) {
+      alert('Error creating payrun: ' + err.message);
+    }
   };
 
   // Step 2 filtered list

@@ -13,12 +13,12 @@ import {
   Printer,
   FileCheck
 } from 'lucide-react';
-import { getPayrunById, updatePayrun } from '../../data/payruns';
-import { getPayslips, updatePayslip, updatePayslipsStatusByPayrun } from '../../data/payslips';
-import { getEmployees } from '../../data/employees';
-import { getContracts } from '../../data/contracts';
-import { getSalaryStructures } from '../../data/salaryStructures';
-import { getSalaryRules } from '../../data/salaryRules';
+import { getPayrunById, updatePayrun, fetchPayrunByIdAsync } from '../../data/payruns';
+import { getPayslips, updatePayslip, updatePayslipsStatusByPayrun, fetchPayslipsAsync } from '../../data/payslips';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import { getContracts, fetchContractsAsync } from '../../data/contracts';
+import { getSalaryStructures, fetchSalaryStructuresAsync } from '../../data/salaryStructures';
+import { getSalaryRules, fetchSalaryRulesAsync } from '../../data/salaryRules';
 import { calculatePayslip } from '../../utils/payrollCalculation';
 import { useAuth } from '../../context/AuthContext';
 import { canApprove, canMarkPaidAndSend, MODULES } from '../../utils/permissionUtils';
@@ -56,21 +56,42 @@ export const PayrunDetail = () => {
 
   const loadData = () => {
     const currentRun = getPayrunById(id);
-    if (!currentRun) return;
+    if (currentRun) {
+      setPayrun(currentRun);
+      setPayslips(getPayslips(id));
+    }
 
-    const allSlips = getPayslips(id);
-    const emps = getEmployees();
-    const ctrs = getContracts();
-    const rules = getSalaryRules();
-    const structures = getSalaryStructures();
-    const struct = structures.find((s) => s.id === currentRun.salaryStructureId);
+    fetchPayrunByIdAsync(id).then((fresh) => {
+      if (fresh) {
+        setPayrun(fresh);
+        if (Array.isArray(fresh.payslips) && fresh.payslips.length > 0) {
+          setPayslips(fresh.payslips);
+        }
+      }
+    }).catch(console.error);
 
-    setPayrun(currentRun);
-    setPayslips(allSlips);
-    setEmployees(emps);
-    setContracts(ctrs);
-    setSalaryRules(rules);
-    setSalaryStructure(struct);
+    fetchPayslipsAsync(id).then((slips) => {
+      if (Array.isArray(slips) && slips.length > 0) setPayslips(slips);
+    }).catch(console.error);
+
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+
+    fetchContractsAsync().then((list) => {
+      if (Array.isArray(list)) setContracts(list);
+    }).catch(console.error);
+
+    fetchSalaryRulesAsync().then((list) => {
+      if (Array.isArray(list)) setSalaryRules(list);
+    }).catch(console.error);
+
+    fetchSalaryStructuresAsync().then((list) => {
+      if (Array.isArray(list)) {
+        const match = list.find((s) => s.id === (payrun?.salaryStructureId || payrun?.structureId));
+        if (match) setSalaryStructure(match);
+      }
+    }).catch(console.error);
   };
 
   if (!payrun) {

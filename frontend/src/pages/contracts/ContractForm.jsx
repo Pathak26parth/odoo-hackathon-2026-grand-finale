@@ -144,17 +144,17 @@ export const ContractForm = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setSubmitting(true);
     try {
       if (isCreate) {
-        createContract(formData);
+        await createContract(formData);
         setToastMessage('Contract created successfully!');
       } else {
-        updateContract(id, formData);
+        await updateContract(id, formData);
         setToastMessage('Contract updated successfully!');
       }
 

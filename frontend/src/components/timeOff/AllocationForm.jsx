@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PieChart, Save, ArrowLeft } from 'lucide-react';
 import { LeaveBalanceCard } from './LeaveBalanceCard';
 
@@ -19,6 +19,27 @@ export const AllocationForm = ({
     validUntil: `${new Date().getFullYear()}-12-31`,
     status: 'Active'
   });
+
+  useEffect(() => {
+    if (employees.length > 0 && !formData.employeeId) {
+      setFormData((prev) => ({
+        ...prev,
+        employeeId: employees[0].id,
+        employeeName: employees[0].name
+      }));
+    }
+  }, [employees]);
+
+  useEffect(() => {
+    if (timeOffTypes.length > 0 && !formData.timeOffTypeId) {
+      setFormData((prev) => ({
+        ...prev,
+        timeOffTypeId: timeOffTypes[0].id,
+        timeOffTypeName: timeOffTypes[0].name,
+        unit: timeOffTypes[0].unit || 'Days'
+      }));
+    }
+  }, [timeOffTypes]);
 
   const handleEmployeeChange = (empId) => {
     const emp = employees.find((e) => e.id === empId);

@@ -237,9 +237,12 @@ class EmployeeController {
         }
       }
 
-      // Resolve effective role for user account creation
+      // Resolve effective role with security check: Only System Admin can assign the ADMIN role
       const chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
-      const effectiveRole = chosenRole || 'EMPLOYEE';
+      let effectiveRole = chosenRole || 'EMPLOYEE';
+      if (String(effectiveRole).toUpperCase() === 'ADMIN' && req.user.role !== 'ADMIN') {
+        effectiveRole = 'HR_MANAGER';
+      }
 
       const result = await authService.createEmployeeWithAccount({
         employeeData: {
@@ -455,6 +458,10 @@ class EmployeeController {
       let resolvedRoleId = null;
       if (targetRole) {
         resolvedRoleId = await authService.resolveRoleId(targetRole);
+        // Security check: Only System Admin can assign or promote anyone to the ADMIN role
+        if (resolvedRoleId === 1 && req.user.role !== 'ADMIN') {
+          return sendError(res, 'Forbidden: Only a System Administrator can promote an account to the Admin role.', 403);
+        }
       }
 
       const userEmail = targetEmail || existing[0].email;

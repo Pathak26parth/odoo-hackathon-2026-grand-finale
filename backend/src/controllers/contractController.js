@@ -115,37 +115,95 @@ class ContractController {
         contractCode,
         employeeId,
         departmentId,
+        department,
         jobPosition,
+        position,
         wage,
         salaryStructureId,
+        salaryStructure,
         workingScheduleId,
+        workingSchedule,
         startDate,
         endDate,
         status = 'ACTIVE'
       } = req.body;
 
-      if (!employeeId || !wage || !salaryStructureId || !startDate) {
-        return sendError(res, 'employeeId, wage, salaryStructureId, and startDate are required.', 400);
+      if (!employeeId || wage === undefined || wage === null || !startDate) {
+        return sendError(res, 'employeeId, wage, and startDate are required.', 400);
       }
 
-      const cCode = contractCode || `CON-${employeeId}-${Date.now().toString().slice(-4)}`;
+      // 1. Resolve Employee ID
+      let resolvedEmpId = null;
+      const cleanEmp = String(employeeId).trim();
+      if (/^\d+$/.test(cleanEmp)) {
+        resolvedEmpId = parseInt(cleanEmp, 10);
+      } else {
+        const empRows = await query('SELECT id, department_id, job_position FROM employees WHERE employee_code = ? OR email = ? LIMIT 1', [cleanEmp, cleanEmp]);
+        if (empRows.length > 0) {
+          resolvedEmpId = empRows[0].id;
+        }
+      }
+
+      if (!resolvedEmpId) {
+        return sendError(res, `Employee not found for "${employeeId}".`, 404);
+      }
+
+      // 2. Resolve Department ID
+      let resolvedDeptId = departmentId ? parseInt(departmentId, 10) : null;
+      if (!resolvedDeptId && department) {
+        const deptRows = await query('SELECT id FROM departments WHERE name = ? OR code = ? LIMIT 1', [department, department]);
+        if (deptRows.length > 0) resolvedDeptId = deptRows[0].id;
+      }
+
+      // 3. Resolve Salary Structure ID
+      let resolvedStructureId = salaryStructureId ? parseInt(salaryStructureId, 10) : null;
+      if (!resolvedStructureId && salaryStructure) {
+        const structRows = await query('SELECT id FROM salary_structures WHERE name = ? OR code = ? LIMIT 1', [salaryStructure, salaryStructure]);
+        if (structRows.length > 0) resolvedStructureId = structRows[0].id;
+      }
+      if (!resolvedStructureId) {
+        // Fallback to first available structure
+        const defaultStruct = await query('SELECT id FROM salary_structures ORDER BY id ASC LIMIT 1');
+        resolvedStructureId = defaultStruct.length > 0 ? defaultStruct[0].id : 1;
+      }
+
+      // 4. Resolve Working Schedule ID
+      let resolvedScheduleId = workingScheduleId ? parseInt(workingScheduleId, 10) : null;
+      if (!resolvedScheduleId && workingSchedule) {
+        const schedRows = await query('SELECT id FROM working_schedules WHERE name = ? LIMIT 1', [workingSchedule]);
+        if (schedRows.length > 0) resolvedScheduleId = schedRows[0].id;
+      }
+      if (!resolvedScheduleId) {
+        const defaultSched = await query('SELECT id FROM working_schedules ORDER BY id ASC LIMIT 1');
+        resolvedScheduleId = defaultSched.length > 0 ? defaultSched[0].id : 1;
+      }
+
+      const cCode = contractCode || `CON-${resolvedEmpId}-${Date.now().toString().slice(-4)}`;
+      const resolvedJob = jobPosition || position || 'Staff';
 
       // If status is ACTIVE, ensure no overlapping ACTIVE contract exists for this employee
-      if (status === 'ACTIVE') {
-        const activeCheck = await query(
-          'SELECT id FROM contracts WHERE employee_id = ? AND status = "ACTIVE"',
-          [employeeId]
+      if (status.toUpperCase() === 'ACTIVE') {
+        await query(
+          'UPDATE contracts SET status = "EXPIRED", updated_at = NOW() WHERE employee_id = ? AND status = "ACTIVE"',
+          [resolvedEmpId]
         );
-        if (activeCheck.length > 0) {
-          // Deactivate prior active contracts to avoid concurrent active contracts
-          await query('UPDATE contracts SET status = "EXPIRED", updated_at = NOW() WHERE employee_id = ? AND status = "ACTIVE"', [employeeId]);
-        }
       }
 
       const result = await query(
         `INSERT INTO contracts (contract_code, employee_id, department_id, job_position, wage, salary_structure_id, working_schedule_id, start_date, end_date, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [cCode, employeeId, departmentId || null, jobPosition || null, wage, salaryStructureId, workingScheduleId || null, startDate, endDate || null, status]
+        [
+          cCode,
+          resolvedEmpId,
+          resolvedDeptId || null,
+          resolvedJob,
+          parseFloat(wage) || 0,
+          resolvedStructureId,
+          resolvedScheduleId,
+          startDate,
+          endDate || null,
+          status.toUpperCase()
+        ]
       );
 
       // Audit Log
@@ -168,12 +226,32 @@ class ContractController {
   async updateContract(req, res, next) {
     try {
       const { id } = req.params;
-      const { departmentId, jobPosition, wage, salaryStructureId, workingScheduleId, startDate, endDate, status } = req.body;
+      const { departmentId, department, jobPosition, position, wage, salaryStructureId, salaryStructure, workingScheduleId, workingSchedule, startDate, endDate, status } = req.body;
 
       const existing = await query('SELECT * FROM contracts WHERE id = ?', [id]);
       if (existing.length === 0) {
         return sendError(res, 'Contract not found.', 404);
       }
+
+      let resolvedDeptId = departmentId ? parseInt(departmentId, 10) : undefined;
+      if (resolvedDeptId === undefined && department) {
+        const deptRows = await query('SELECT id FROM departments WHERE name = ? OR code = ? LIMIT 1', [department, department]);
+        if (deptRows.length > 0) resolvedDeptId = deptRows[0].id;
+      }
+
+      let resolvedStructureId = salaryStructureId ? parseInt(salaryStructureId, 10) : undefined;
+      if (resolvedStructureId === undefined && salaryStructure) {
+        const structRows = await query('SELECT id FROM salary_structures WHERE name = ? OR code = ? LIMIT 1', [salaryStructure, salaryStructure]);
+        if (structRows.length > 0) resolvedStructureId = structRows[0].id;
+      }
+
+      let resolvedScheduleId = workingScheduleId ? parseInt(workingScheduleId, 10) : undefined;
+      if (resolvedScheduleId === undefined && workingSchedule) {
+        const schedRows = await query('SELECT id FROM working_schedules WHERE name = ? LIMIT 1', [workingSchedule]);
+        if (schedRows.length > 0) resolvedScheduleId = schedRows[0].id;
+      }
+
+      const resolvedJob = jobPosition || position;
 
       await query(
         `UPDATE contracts SET
@@ -187,7 +265,17 @@ class ContractController {
           status = COALESCE(?, status),
           updated_at = NOW()
         WHERE id = ?`,
-        [departmentId, jobPosition, wage, salaryStructureId, workingScheduleId, startDate, endDate, status, id]
+        [
+          resolvedDeptId !== undefined ? resolvedDeptId : null,
+          resolvedJob !== undefined ? resolvedJob : null,
+          wage !== undefined ? parseFloat(wage) : null,
+          resolvedStructureId !== undefined ? resolvedStructureId : null,
+          resolvedScheduleId !== undefined ? resolvedScheduleId : null,
+          startDate !== undefined ? startDate : null,
+          endDate !== undefined ? endDate : null,
+          status !== undefined ? status.toUpperCase() : null,
+          id
+        ]
       );
 
       return sendSuccess(res, 'Contract updated successfully');
