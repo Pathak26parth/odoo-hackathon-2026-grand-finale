@@ -12,14 +12,23 @@ export const TimeOffRequestForm = ({
   onCancel,
   canSelectAnyEmployee = false
 }) => {
-  const defaultEmp = employees.find((e) => e.id === currentEmployeeId) || employees[0] || {};
+  const defaultEmp =
+    employees.find(
+      (e) =>
+        String(e.id) === String(currentEmployeeId) ||
+        e.employeeId === currentEmployeeId ||
+        e.employee_code === currentEmployeeId
+    ) ||
+    employees[0] ||
+    {};
 
   const [formData, setFormData] = useState({
-    employeeId: defaultEmp.id || 'emp-1',
-    employeeName: defaultEmp.name || 'Amelia Johnson',
-    department: defaultEmp.department || 'Engineering',
-    timeOffTypeId: timeOffTypes[0]?.id || 'tot-1',
-    timeOffTypeName: timeOffTypes[0]?.name || 'Annual Leave',
+    employeeId: defaultEmp.id || '1',
+    employeeCode: defaultEmp.employeeId || defaultEmp.employee_code || 'EMP-001',
+    employeeName: defaultEmp.name || 'Employee',
+    department: defaultEmp.department || 'General',
+    timeOffTypeId: timeOffTypes[0]?.id || '1',
+    timeOffTypeName: timeOffTypes[0]?.name || 'Paid Time Off',
     unit: timeOffTypes[0]?.unit || 'Days',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
@@ -29,6 +38,29 @@ export const TimeOffRequestForm = ({
 
   const [employeeAllocations, setEmployeeAllocations] = useState([]);
   const [matchingAlloc, setMatchingAlloc] = useState(null);
+
+  // Sync selected employee when employees list or currentEmployeeId updates
+  useEffect(() => {
+    if (employees.length > 0) {
+      const match =
+        employees.find(
+          (e) =>
+            String(e.id) === String(currentEmployeeId) ||
+            e.employeeId === currentEmployeeId ||
+            e.employee_code === currentEmployeeId
+        ) || employees[0];
+
+      if (match) {
+        setFormData((prev) => ({
+          ...prev,
+          employeeId: match.id,
+          employeeCode: match.employeeId || match.employee_code,
+          employeeName: match.name,
+          department: match.department
+        }));
+      }
+    }
+  }, [employees, currentEmployeeId]);
 
   // Update allocations when selected employee changes
   useEffect(() => {
@@ -42,8 +74,9 @@ export const TimeOffRequestForm = ({
   useEffect(() => {
     const match = employeeAllocations.find(
       (a) =>
-        a.timeOffTypeId === formData.timeOffTypeId ||
-        a.timeOffTypeName.toLowerCase() === formData.timeOffTypeName.toLowerCase()
+        String(a.timeOffTypeId) === String(formData.timeOffTypeId) ||
+        (a.timeOffTypeName && formData.timeOffTypeName && a.timeOffTypeName.toLowerCase() === formData.timeOffTypeName.toLowerCase()) ||
+        (a.leaveType && formData.timeOffTypeName && a.leaveType.toLowerCase() === formData.timeOffTypeName.toLowerCase())
     );
     setMatchingAlloc(match || null);
   }, [employeeAllocations, formData.timeOffTypeId, formData.timeOffTypeName]);
@@ -55,17 +88,18 @@ export const TimeOffRequestForm = ({
   }, [formData.startDate, formData.endDate]);
 
   const handleEmployeeChange = (empId) => {
-    const emp = employees.find((e) => e.id === empId);
+    const emp = employees.find((e) => String(e.id) === String(empId) || e.employeeId === empId);
     setFormData((prev) => ({
       ...prev,
       employeeId: empId,
+      employeeCode: emp ? (emp.employeeId || emp.employee_code) : prev.employeeCode,
       employeeName: emp ? emp.name : prev.employeeName,
       department: emp ? emp.department : prev.department
     }));
   };
 
   const handleTypeChange = (typeId) => {
-    const t = timeOffTypes.find((item) => item.id === typeId);
+    const t = timeOffTypes.find((item) => String(item.id) === String(typeId));
     setFormData((prev) => ({
       ...prev,
       timeOffTypeId: typeId,
@@ -76,7 +110,14 @@ export const TimeOffRequestForm = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    const resolvedEmp = employees.find(
+      (e) => String(e.id) === String(formData.employeeId) || e.employeeId === formData.employeeId
+    );
+    onSubmit({
+      ...formData,
+      employeeId: resolvedEmp?.id || formData.employeeId,
+      employeeCode: resolvedEmp?.employeeId || formData.employeeCode
+    });
   };
 
   return (

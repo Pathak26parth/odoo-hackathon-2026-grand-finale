@@ -47,7 +47,7 @@ export const AllocationTable = ({
           </div>
           <div>
             <span className="font-bold text-slate-900 block leading-tight">{row.employeeName}</span>
-            <span className="text-[11px] text-slate-400 font-mono">{row.id}</span>
+            <span className="text-[11px] text-slate-400 font-mono">{row.employeeId || row.id}</span>
           </div>
         </div>
       )
@@ -57,7 +57,7 @@ export const AllocationTable = ({
       key: 'timeOffTypeName',
       render: (row) => (
         <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-          {row.timeOffTypeName}
+          {row.timeOffTypeName || row.leaveType || 'Paid Time Off'}
         </span>
       )
     },
@@ -66,7 +66,8 @@ export const AllocationTable = ({
       key: 'allocated',
       render: (row) => (
         <span className="font-bold text-slate-900 font-mono text-xs">
-          {row.allocated} <span className="text-slate-400 font-normal">{row.unit || 'Days'}</span>
+          {row.allocated !== undefined ? row.allocated : row.allocatedDays !== undefined ? row.allocatedDays : 0}{' '}
+          <span className="text-slate-400 font-normal">{row.unit || 'Days'}</span>
         </span>
       )
     },
@@ -75,7 +76,8 @@ export const AllocationTable = ({
       key: 'taken',
       render: (row) => (
         <span className="font-bold text-amber-600 font-mono text-xs">
-          {row.taken} <span className="text-slate-400 font-normal">{row.unit || 'Days'}</span>
+          {row.taken !== undefined ? row.taken : row.takenDays !== undefined ? row.takenDays : 0}{' '}
+          <span className="text-slate-400 font-normal">{row.unit || 'Days'}</span>
         </span>
       )
     },
@@ -84,19 +86,28 @@ export const AllocationTable = ({
       key: 'remaining',
       render: (row) => (
         <span className="font-extrabold text-emerald-700 font-mono text-xs bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-          {row.remaining} {row.unit || 'Days'}
+          {row.remaining !== undefined ? row.remaining : row.remainingDays !== undefined ? row.remainingDays : 0}{' '}
+          {row.unit || 'Days'}
         </span>
       )
     },
     {
       header: 'Valid From',
       key: 'validFrom',
-      cellClassName: 'font-mono text-xs text-slate-700'
+      render: (row) => (
+        <span className="font-mono text-xs text-slate-700">
+          {row.validFrom || row.validityStart || '2026-01-01'}
+        </span>
+      )
     },
     {
       header: 'Valid Until',
       key: 'validUntil',
-      cellClassName: 'font-mono text-xs text-slate-700'
+      render: (row) => (
+        <span className="font-mono text-xs text-slate-700">
+          {row.validUntil || row.validityEnd || '2026-12-31'}
+        </span>
+      )
     },
     {
       header: 'Status',

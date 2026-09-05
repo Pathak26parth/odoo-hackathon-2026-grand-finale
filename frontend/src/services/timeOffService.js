@@ -22,22 +22,35 @@ export function normalizeAllocation(a) {
   const firstName = a.first_name || '';
   const lastName = a.last_name || '';
   const empName = a.employee_name || `${firstName} ${lastName}`.trim() || 'Employee';
+  const typeName = a.type_name || a.leaveType || a.timeOffTypeName || 'Paid Time Off';
+  const allocated = parseFloat(a.allocated_days || a.allocatedDays || a.allocated || 0);
+  const taken = parseFloat(a.taken_days || a.takenDays || a.taken || 0);
+  const remaining = parseFloat(a.remaining_days || a.remainingDays || a.remaining || (allocated - taken));
+  const validStart = a.validity_start ? String(a.validity_start).split('T')[0] : (a.validFrom || `${a.year || 2026}-01-01`);
+  const validEnd = a.validity_end ? String(a.validity_end).split('T')[0] : (a.validUntil || `${a.year || 2026}-12-31`);
 
   return {
     ...a,
     id: String(a.id),
-    employeeId: a.employee_code || String(a.employee_id),
-    internalEmployeeId: a.employee_id,
+    employeeId: a.employee_code || (a.employee_id ? `EMP-${String(a.employee_id).padStart(3, '0')}` : String(a.employee_id)),
+    internalEmployeeId: a.employee_id || a.internalEmployeeId,
     employeeName: empName,
-    leaveType: a.type_name || a.leaveType || 'Paid Time Off',
-    timeOffTypeId: a.time_off_type_id || a.timeOffTypeId,
+    leaveType: typeName,
+    timeOffTypeName: typeName,
+    timeOffTypeId: String(a.time_off_type_id || a.timeOffTypeId || 1),
     year: a.year || new Date().getFullYear(),
-    allocatedDays: parseFloat(a.allocated_days || a.allocatedDays || 0),
-    takenDays: parseFloat(a.taken_days || a.takenDays || 0),
-    remainingDays: parseFloat(a.remaining_days || a.remainingDays || 0),
-    validityStart: a.validity_start ? a.validity_start.split('T')[0] : '',
-    validityEnd: a.validity_end ? a.validity_end.split('T')[0] : '',
-    status: a.status || 'Approved'
+    allocated: allocated,
+    allocatedDays: allocated,
+    taken: taken,
+    takenDays: taken,
+    remaining: remaining,
+    remainingDays: remaining,
+    validFrom: validStart,
+    validUntil: validEnd,
+    validityStart: validStart,
+    validityEnd: validEnd,
+    unit: a.unit || 'Days',
+    status: (a.status || 'Approved').toUpperCase()
   };
 }
 
@@ -46,26 +59,30 @@ export function normalizeLeaveRequest(r) {
   const firstName = r.first_name || '';
   const lastName = r.last_name || '';
   const empName = r.employee_name || `${firstName} ${lastName}`.trim() || 'Employee';
+  const typeName = r.type_name || r.leaveType || r.timeOffTypeName || 'Paid Time Off';
+  const dur = parseFloat(r.total_days || r.totalDays || r.duration || 1);
 
   return {
     ...r,
     id: String(r.id),
-    employeeId: r.employee_code || String(r.employee_id),
-    internalEmployeeId: r.employee_id,
+    employeeId: r.employee_code || (r.employee_id ? `EMP-${String(r.employee_id).padStart(3, '0')}` : String(r.employee_id)),
+    internalEmployeeId: r.employee_id || r.internalEmployeeId,
     employeeName: empName,
     department: r.department_name || r.department || 'General',
-    leaveType: r.type_name || r.leaveType || 'Paid Time Off',
-    timeOffTypeId: r.time_off_type_id || r.timeOffTypeId,
-    startDate: r.start_date ? r.start_date.split('T')[0] : '',
-    endDate: r.end_date ? r.end_date.split('T')[0] : '',
-    duration: parseFloat(r.total_days || r.duration || 0),
-    totalDays: parseFloat(r.total_days || r.duration || 0),
+    leaveType: typeName,
+    timeOffTypeName: typeName,
+    timeOffTypeId: String(r.time_off_type_id || r.timeOffTypeId || 1),
+    startDate: r.start_date ? String(r.start_date).split('T')[0] : (r.startDate || ''),
+    endDate: r.end_date ? String(r.end_date).split('T')[0] : (r.endDate || ''),
+    duration: dur,
+    totalDays: dur,
+    unit: r.unit || 'Days',
     reason: r.reason || '',
     status: (r.status || 'Pending').charAt(0).toUpperCase() + (r.status || 'Pending').slice(1).toLowerCase(),
-    approverName: r.approver_name || null,
+    approverName: r.approver_name || r.approved_by_name || null,
     approvedAt: r.approved_at || null,
     rejectionReason: r.rejection_reason || null,
-    createdAt: r.created_at ? r.created_at.split('T')[0] : ''
+    createdAt: r.created_at ? String(r.created_at).split('T')[0] : ''
   };
 }
 

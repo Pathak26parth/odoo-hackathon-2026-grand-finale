@@ -169,7 +169,7 @@ export const AuthProvider = ({ children }) => {
   const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || can('dashboard.read');
   const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager' || can('dashboard.read');
   const canManageUsers = role === 'Admin' || can('users.manage') || can('users.create');
-  const canRegisterFace = role !== 'Guest';
+  const canRegisterFace = isHRorAdmin;
 
   return (
     <AuthContext.Provider

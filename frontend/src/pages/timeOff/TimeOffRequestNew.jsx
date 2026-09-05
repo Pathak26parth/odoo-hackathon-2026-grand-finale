@@ -2,34 +2,45 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { createTimeOffRequest } from '../../data/timeOffRequests';
-import { getTimeOffTypes } from '../../data/timeOffTypes';
-import { getEmployees } from '../../data/employees';
+import { getTimeOffTypes, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { TimeOffRequestForm } from '../../components/timeOff/TimeOffRequestForm';
 
 export const TimeOffRequestNew = () => {
   const navigate = useNavigate();
-  const { currentUser, isHRorAdmin } = useAuth();
+  const { currentUser, isHRorAdmin, isEmployeeOnly } = useAuth();
 
   const [employees, setEmployees] = useState([]);
   const [types, setTypes] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setEmployees(getEmployees());
     setTypes(getTimeOffTypes().filter((t) => t.status === 'Active'));
+
+    fetchEmployeesAsync().then((list) => {
+      if (list && list.length > 0) setEmployees(list);
+    }).catch(console.error);
+
+    fetchTimeOffTypesAsync().then((list) => {
+      if (list && list.length > 0) setTypes(list.filter((t) => t.status === 'Active'));
+    }).catch(console.error);
   }, []);
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
+    setSubmitting(true);
     try {
-      createTimeOffRequest(data);
+      await createTimeOffRequest(data);
       setToastMessage('Time off request submitted successfully! Status: Pending.');
       setTimeout(() => {
         navigate('/time-off/requests');
       }, 900);
     } catch (err) {
       alert('Error submitting request: ' + err.message);
+      setSubmitting(false);
     }
   };
 
@@ -63,8 +74,8 @@ export const TimeOffRequestNew = () => {
         <TimeOffRequestForm
           employees={employees}
           timeOffTypes={types}
-          currentEmployeeId={currentUser?.employeeId}
-          canSelectAnyEmployee={isHRorAdmin}
+          currentEmployeeId={currentUser?.internalEmployeeId || currentUser?.employeeId || currentUser?.id}
+          canSelectAnyEmployee={isHRorAdmin && !isEmployeeOnly}
           onSubmit={handleSubmit}
           onCancel={() => navigate('/time-off/requests')}
         />

@@ -58,13 +58,23 @@ export const TimeOffAllocations = () => {
     const matchesSearch =
       a.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.timeOffTypeName?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = typeFilter === 'All' || a.timeOffTypeName === typeFilter;
-    const matchesStatus = statusFilter === 'All' || a.status === statusFilter;
-    const matchesEmp = selectedEmployeeId === 'All' || a.employeeId === selectedEmployeeId;
+    const matchesType = typeFilter === 'All' || a.timeOffTypeName === typeFilter || a.leaveType === typeFilter;
+    const matchesStatus = statusFilter === 'All' || a.status?.toUpperCase() === statusFilter.toUpperCase();
 
-    if (isEmployeeOnly && currentUser?.employeeId) {
-      return a.employeeId === currentUser.employeeId && matchesType && matchesStatus && matchesSearch;
+    if (isEmployeeOnly) {
+      const myId = currentUser?.employeeId;
+      const myIntId = currentUser?.internalEmployeeId;
+      const matchesMine =
+        (myId && a.employeeId === myId) ||
+        (myIntId && String(a.internalEmployeeId) === String(myIntId)) ||
+        (currentUser?.id && String(a.employeeId) === String(currentUser?.id));
+      return matchesMine && matchesType && matchesStatus && matchesSearch;
     }
+
+    const matchesEmp =
+      selectedEmployeeId === 'All' ||
+      a.employeeId === selectedEmployeeId ||
+      String(a.internalEmployeeId) === String(selectedEmployeeId);
 
     return matchesSearch && matchesType && matchesStatus && matchesEmp;
   });
@@ -72,22 +82,33 @@ export const TimeOffAllocations = () => {
   const paginated = filteredAllocations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Focus employee allocations for top balance cards preview
-  const focusedEmployeeId =
-    selectedEmployeeId !== 'All'
-      ? selectedEmployeeId
-      : isEmployeeOnly && currentUser?.employeeId
-      ? currentUser.employeeId
-      : allocations[0]?.employeeId;
+  const employeeTopCards = allocations.filter((a) => {
+    if (isEmployeeOnly) {
+      return (
+        (currentUser?.employeeId && a.employeeId === currentUser.employeeId) ||
+        (currentUser?.internalEmployeeId && String(a.internalEmployeeId) === String(currentUser.internalEmployeeId))
+      );
+    }
+    if (selectedEmployeeId !== 'All') {
+      return (
+        a.employeeId === selectedEmployeeId ||
+        String(a.internalEmployeeId) === String(selectedEmployeeId)
+      );
+    }
+    // Default to first employee's allocation group
+    return a.employeeId === allocations[0]?.employeeId;
+  });
 
-  const employeeTopCards = allocations.filter((a) => a.employeeId === focusedEmployeeId);
-  const focusedEmployeeObj = employees.find((e) => e.id === focusedEmployeeId);
+  const focusedEmployeeName = isEmployeeOnly
+    ? (currentUser?.name || currentUser?.employeeName || 'My Leave Balances')
+    : (employees.find((e) => e.id === selectedEmployeeId || e.employeeId === selectedEmployeeId)?.name || employeeTopCards[0]?.employeeName || 'Staff Member');
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
         title="Time Off Allocations"
-        subtitle={`Employee leave quotas, historical grants, and remaining balances (${allocations.length} records)`}
+        subtitle={`Employee leave quotas, historical grants, and remaining balances (${filteredAllocations.length} records)`}
       >
         {canManageAllocations && (
           <button
@@ -106,9 +127,9 @@ export const TimeOffAllocations = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
               <PieChart className="w-3.5 h-3.5 text-blue-600" />
-              <span>Leave Balances Summary — {focusedEmployeeObj?.name || 'Staff Member'}</span>
+              <span>Leave Balances Summary — {focusedEmployeeName}</span>
             </h3>
-            {isHRorAdmin && (
+            {isHRorAdmin && selectedEmployeeId !== 'All' && (
               <span className="text-[11px] text-slate-400">
                 (Filtered by selected employee)
               </span>
@@ -119,12 +140,12 @@ export const TimeOffAllocations = () => {
             {employeeTopCards.map((item) => (
               <LeaveBalanceCard
                 key={item.id}
-                title={item.timeOffTypeName}
-                allocated={item.allocated}
-                taken={item.taken}
-                remaining={item.remaining}
-                unit={item.unit}
-                subtitle={`Valid: ${item.validFrom} to ${item.validUntil}`}
+                title={item.timeOffTypeName || item.leaveType}
+                allocated={item.allocated !== undefined ? item.allocated : item.allocatedDays}
+                taken={item.taken !== undefined ? item.taken : item.takenDays}
+                remaining={item.remaining !== undefined ? item.remaining : item.remainingDays}
+                unit={item.unit || 'Days'}
+                subtitle={`Valid: ${item.validFrom || item.validityStart || '2026-01-01'} to ${item.validUntil || item.validityEnd || '2026-12-31'}`}
               />
             ))}
           </div>

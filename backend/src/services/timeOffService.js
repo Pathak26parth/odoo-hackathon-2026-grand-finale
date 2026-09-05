@@ -6,9 +6,28 @@ const STATUSES = require('../constants/statuses');
  */
 class TimeOffService {
   /**
+   * Resolve employee record ID
+   */
+  async resolveEmployeeId(identifier) {
+    if (!identifier) return null;
+    const cleanStr = String(identifier).trim();
+    if (/^\d+$/.test(cleanStr)) return parseInt(cleanStr, 10);
+    const rows = await query('SELECT id FROM employees WHERE employee_code = ? OR email = ?', [cleanStr, cleanStr]);
+    if (rows.length > 0) return rows[0].id;
+    return null;
+  }
+
+  /**
    * Submit Time Off Request
    */
   async submitRequest({ employeeId, timeOffTypeId, startDate, endDate, totalDays, reason }) {
+    const actualEmpId = await this.resolveEmployeeId(employeeId);
+    if (!actualEmpId) {
+      const err = new Error(`Employee not found for identifier "${employeeId}".`);
+      err.statusCode = 404;
+      throw err;
+    }
+
     // 1. Fetch time off type policy
     const typeRows = await query('SELECT * FROM time_off_types WHERE id = ?', [timeOffTypeId]);
     if (typeRows.length === 0) {
@@ -25,7 +44,7 @@ class TimeOffService {
       const allocRows = await query(
         `SELECT * FROM time_off_allocations 
          WHERE employee_id = ? AND time_off_type_id = ? AND year = ? AND status = 'APPROVED'`,
-        [employeeId, timeOffTypeId, year]
+        [actualEmpId, timeOffTypeId, year]
       );
 
       if (allocRows.length === 0) {
@@ -48,12 +67,12 @@ class TimeOffService {
     const insertResult = await query(
       `INSERT INTO time_off_requests (employee_id, time_off_type_id, start_date, end_date, total_days, reason, status)
        VALUES (?, ?, ?, ?, ?, ?, 'PENDING')`,
-      [employeeId, timeOffTypeId, startDate, endDate, totalDays, reason]
+      [actualEmpId, timeOffTypeId, startDate, endDate, totalDays, reason]
     );
 
     return {
       requestId: insertResult.insertId,
-      employeeId,
+      employeeId: actualEmpId,
       timeOffTypeId,
       startDate,
       endDate,
