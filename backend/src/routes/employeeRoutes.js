@@ -4,6 +4,7 @@ const employeeController = require('../controllers/employeeController');
 const { requireAuth } = require('../middleware/authMiddleware');
 const { requirePermission, requireSelfOrAdmin } = require('../middleware/permissionMiddleware');
 const { validateCreateEmployee } = require('../middleware/validationMiddleware');
+const { sendError } = require('../utils/response');
 const { PERMISSIONS } = require('../constants/permissions');
 
 // Self-Service Employee Route

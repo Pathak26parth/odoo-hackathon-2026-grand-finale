@@ -84,6 +84,7 @@ export const EmployeeDetail = () => {
   };
 
   const populateForm = (existing) => {
+    if (!existing) return;
     setEmployee(existing);
     const resolvedPhoto = existing.profilePhotoUrl || existing.profile_photo_url || existing.avatar || DEFAULT_PHOTO;
     setFormData({
@@ -94,11 +95,11 @@ export const EmployeeDetail = () => {
       phone: existing.phone || '',
       avatar: resolvedPhoto,
       profilePhotoUrl: resolvedPhoto,
-      department: existing.department || existing.department_name || '',
+      department: existing.department || existing.department_name || 'Engineering & Technology',
       manager: existing.manager || existing.manager_name || 'None',
       position: existing.position || existing.job_position || '',
-      schedule: existing.schedule || existing.schedule_name || 'Standard 40 Hours',
-      status: existing.status || (existing.is_active ? 'Active' : 'Inactive')
+      schedule: existing.schedule || existing.schedule_name || 'Standard Full-Time (40h/week)',
+      status: (existing.status || 'Active').toUpperCase() === 'ACTIVE' ? 'Active' : (existing.status || 'Inactive')
     });
   };
 
@@ -152,25 +153,23 @@ export const EmployeeDetail = () => {
     try {
       if (isCreate) {
         const created = await createEmployee(formData);
-        const newUrl = created?.data?.profilePhotoUrl || created?.profilePhotoUrl;
+        const newUrl = created?.data?.profilePhotoUrl || created?.profilePhotoUrl || created?.avatar;
         if (newUrl) {
           setFormData((prev) => ({ ...prev, avatar: newUrl, profilePhotoUrl: newUrl }));
         }
-        setToastMessage('Employee created and photo saved to Cloudinary successfully!');
+        setToastMessage('Employee created and saved successfully!');
       } else {
         const updated = await updateEmployee(id, formData);
-        const newUrl = updated?.data?.profilePhotoUrl || updated?.profilePhotoUrl;
-        if (newUrl) {
-          setFormData((prev) => ({ ...prev, avatar: newUrl, profilePhotoUrl: newUrl }));
+        if (updated) {
+          populateForm(updated);
         }
-        setToastMessage('Employee details and photo updated in Cloudinary successfully!');
+        setToastMessage('Employee details updated successfully!');
       }
 
       setTimeout(() => {
-        if (isEmployeeOnly) {
-          setIsEditing(false);
-          setSubmitting(false);
-        } else {
+        setIsEditing(false);
+        setSubmitting(false);
+        if (!isEmployeeOnly) {
           navigate('/employees');
         }
       }, 900);
@@ -180,8 +179,27 @@ export const EmployeeDetail = () => {
     }
   };
 
-  const departments = ['Engineering', 'Human Resources', 'Finance', 'Sales', 'Design', 'Operations'];
-  const schedules = ['Standard 40 Hours', 'Flexible Schedule', 'Part Time', 'Night Shift'];
+  const departments = [
+    'Engineering & Technology',
+    'Engineering',
+    'Human Resources',
+    'Finance & Payroll Operations',
+    'Finance',
+    'Marketing & Growth',
+    'Sales',
+    'Design & UX',
+    'Design',
+    'Operations'
+  ];
+  const schedules = [
+    'Standard Full-Time (40h/week)',
+    'Standard 40 Hours',
+    'Operations Shift (48h/week)',
+    'Flexible Schedule',
+    'Part Time',
+    'Night Shift (40h/week)',
+    'Night Shift'
+  ];
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">

@@ -269,27 +269,41 @@ class EmployeeController {
       const {
         firstName,
         lastName,
+        first_name,
+        last_name,
+        email,
         phone,
         jobPosition,
+        position,
+        job_position,
         departmentId,
+        department_id,
+        department,
         managerId,
+        manager_id,
+        manager,
         workingScheduleId,
+        working_schedule_id,
+        schedule,
         gender,
         dateOfBirth,
+        date_of_birth,
         joiningDate,
+        joining_date,
         status,
         profilePhotoUrl,
+        profile_photo_url,
         avatar,
         bankDetails
       } = req.body;
-
-      let photoToUpdate = profilePhotoUrl !== undefined ? profilePhotoUrl : (avatar !== undefined ? avatar : null);
 
       const existing = await query('SELECT * FROM employees WHERE id = ? OR employee_code = ?', [id, id]);
       if (existing.length === 0) {
         return sendError(res, 'Employee not found.', 404);
       }
       const actualEmpId = existing[0].id;
+
+      let photoToUpdate = profilePhotoUrl !== undefined ? profilePhotoUrl : (profile_photo_url !== undefined ? profile_photo_url : (avatar !== undefined ? avatar : null));
 
       // Upload base64 image to Cloudinary if provided
       if (photoToUpdate && cloudinaryService.isBase64Image(photoToUpdate)) {
@@ -304,14 +318,90 @@ class EmployeeController {
         }
       }
 
+      const fName = firstName !== undefined ? firstName : (first_name !== undefined ? first_name : null);
+      const lName = lastName !== undefined ? lastName : (last_name !== undefined ? last_name : null);
+      const targetEmail = email !== undefined && email !== null ? email.trim().toLowerCase() : null;
+      const targetPhone = phone !== undefined && phone !== null ? phone.trim() : null;
+      const targetJobPosition = jobPosition !== undefined ? jobPosition : (position !== undefined ? position : (job_position !== undefined ? job_position : null));
+      const targetGender = gender !== undefined ? gender : null;
+      const targetDateOfBirth = dateOfBirth !== undefined ? dateOfBirth : (date_of_birth !== undefined ? date_of_birth : null);
+      const targetJoiningDate = joiningDate !== undefined ? joiningDate : (joining_date !== undefined ? joining_date : null);
+      const targetStatus = status !== undefined ? (status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : (status.toUpperCase() === 'TERMINATED' ? 'TERMINATED' : 'ACTIVE')) : null;
+
+      // Department resolution
+      let targetDeptId = null;
+      if (departmentId !== undefined && departmentId !== null && !isNaN(Number(departmentId))) {
+        targetDeptId = Number(departmentId);
+      } else if (department_id !== undefined && department_id !== null && !isNaN(Number(department_id))) {
+        targetDeptId = Number(department_id);
+      } else if (department) {
+        const deptStr = String(department).trim().toLowerCase();
+        const depts = await query('SELECT id, name, code FROM departments');
+        const matched = depts.find(d => 
+          d.name.toLowerCase() === deptStr ||
+          deptStr.includes(d.name.toLowerCase()) ||
+          d.name.toLowerCase().includes(deptStr) ||
+          d.code.toLowerCase() === deptStr
+        );
+        if (matched) {
+          targetDeptId = matched.id;
+        } else {
+          try {
+            const [insDept] = await query('INSERT INTO departments (name, code) VALUES (?, ?)', [department, department.slice(0, 4).toUpperCase()]);
+            targetDeptId = insDept.insertId;
+          } catch (e) {
+            targetDeptId = 1;
+          }
+        }
+      }
+
+      // Manager resolution
+      let targetManagerId = undefined; // undefined means preserve existing, null means explicitly clear
+      if (managerId !== undefined) {
+        targetManagerId = managerId !== null && !isNaN(Number(managerId)) ? Number(managerId) : null;
+      } else if (manager_id !== undefined) {
+        targetManagerId = manager_id !== null && !isNaN(Number(manager_id)) ? Number(manager_id) : null;
+      } else if (manager !== undefined) {
+        if (!manager || manager === 'None' || manager === 'null') {
+          targetManagerId = null;
+        } else if (manager === 'Admin User' || manager.toLowerCase().includes('admin')) {
+          const adminEmps = await query('SELECT id FROM employees WHERE id = 1 LIMIT 1');
+          targetManagerId = adminEmps.length > 0 ? adminEmps[0].id : null;
+        } else {
+          const matchedEmps = await query(
+            `SELECT id FROM employees WHERE id != ? AND (CONCAT(first_name, ' ', last_name) LIKE ? OR first_name LIKE ? OR last_name LIKE ?) LIMIT 1`,
+            [actualEmpId, `%${manager}%`, `%${manager}%`, `%${manager}%`]
+          );
+          targetManagerId = matchedEmps.length > 0 ? matchedEmps[0].id : null;
+        }
+      }
+
+      // Working Schedule resolution
+      let targetScheduleId = null;
+      if (workingScheduleId !== undefined && workingScheduleId !== null && !isNaN(Number(workingScheduleId))) {
+        targetScheduleId = Number(workingScheduleId);
+      } else if (working_schedule_id !== undefined && working_schedule_id !== null && !isNaN(Number(working_schedule_id))) {
+        targetScheduleId = Number(working_schedule_id);
+      } else if (schedule) {
+        const schedStr = String(schedule).trim().toLowerCase();
+        const scheds = await query('SELECT id, name, type FROM working_schedules');
+        const matched = scheds.find(s => 
+          s.name.toLowerCase() === schedStr ||
+          schedStr.includes(s.name.toLowerCase()) ||
+          s.name.toLowerCase().includes(schedStr)
+        );
+        targetScheduleId = matched ? matched.id : 1;
+      }
+
       const sql = `
         UPDATE employees SET
           first_name = COALESCE(?, first_name),
           last_name = COALESCE(?, last_name),
+          email = COALESCE(?, email),
           phone = COALESCE(?, phone),
           job_position = COALESCE(?, job_position),
           department_id = COALESCE(?, department_id),
-          manager_id = COALESCE(?, manager_id),
+          manager_id = ${targetManagerId !== undefined ? '?' : 'manager_id'},
           working_schedule_id = COALESCE(?, working_schedule_id),
           gender = COALESCE(?, gender),
           date_of_birth = COALESCE(?, date_of_birth),
@@ -322,21 +412,33 @@ class EmployeeController {
         WHERE id = ?
       `;
 
-      await query(sql, [
-        firstName !== undefined ? firstName : null,
-        lastName !== undefined ? lastName : null,
-        phone !== undefined ? phone : null,
-        jobPosition !== undefined ? jobPosition : null,
-        departmentId !== undefined ? departmentId : null,
-        managerId !== undefined ? managerId : null,
-        workingScheduleId !== undefined ? workingScheduleId : null,
-        gender !== undefined ? gender : null,
-        dateOfBirth !== undefined ? dateOfBirth : null,
-        joiningDate !== undefined ? joiningDate : null,
-        status !== undefined ? status : null,
-        photoToUpdate !== undefined ? photoToUpdate : null,
+      const params = [
+        fName,
+        lName,
+        targetEmail,
+        targetPhone,
+        targetJobPosition,
+        targetDeptId,
+        ...(targetManagerId !== undefined ? [targetManagerId] : []),
+        targetScheduleId,
+        targetGender,
+        targetDateOfBirth,
+        targetJoiningDate,
+        targetStatus,
+        photoToUpdate,
         actualEmpId
-      ]);
+      ];
+
+      await query(sql, params);
+
+      // Update linked user account if exists
+      if (targetEmail) {
+        await query('UPDATE users SET email = ?, updated_at = NOW() WHERE employee_id = ?', [targetEmail, actualEmpId]);
+      }
+      if (targetStatus) {
+        const isActive = targetStatus === 'ACTIVE';
+        await query('UPDATE users SET is_active = ?, updated_at = NOW() WHERE employee_id = ?', [isActive, actualEmpId]);
+      }
 
       // Update Bank Details if provided
       if (bankDetails && bankDetails.accountNumber && bankDetails.ifscCode) {
@@ -353,7 +455,7 @@ class EmployeeController {
              updated_at = NOW()`,
           [
             actualEmpId,
-            bankDetails.accountHolderName || `${firstName || existing[0].first_name} ${lastName || existing[0].last_name}`,
+            bankDetails.accountHolderName || `${fName || existing[0].first_name} ${lName || existing[0].last_name}`,
             bankDetails.bankName || 'Bank',
             bankDetails.accountNumber.trim(),
             bankDetails.ifscCode.trim().toUpperCase(),
@@ -363,8 +465,31 @@ class EmployeeController {
         );
       }
 
-      // Fetch fresh updated employee
-      const [updatedEmp] = await query('SELECT * FROM employees WHERE id = ?', [actualEmpId]);
+      // Fetch fresh updated employee with joins
+      const [updatedEmp] = await query(`
+        SELECT 
+          e.*,
+          d.name AS department_name,
+          d.code AS department_code,
+          CONCAT(m.first_name, ' ', m.last_name) AS manager_name,
+          ws.name AS schedule_name,
+          ws.weekly_hours AS schedule_weekly_hours,
+          fe.enrollment_status AS face_enrollment_status,
+          fe.enrolled_at AS face_enrolled_at,
+          u.id AS user_id,
+          u.is_active AS user_is_active,
+          r.name AS user_role,
+          r.display_name AS user_role_display
+        FROM employees e
+        LEFT JOIN departments d ON e.department_id = d.id
+        LEFT JOIN employees m ON e.manager_id = m.id
+        LEFT JOIN working_schedules ws ON e.working_schedule_id = ws.id
+        LEFT JOIN face_enrollments fe ON e.id = fe.employee_id
+        LEFT JOIN users u ON e.id = u.employee_id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE e.id = ?
+        LIMIT 1
+      `, [actualEmpId]);
 
       // Audit Log
       await query(
@@ -375,6 +500,7 @@ class EmployeeController {
 
       return sendSuccess(res, 'Employee profile updated successfully', {
         employee: updatedEmp || null,
+        ...updatedEmp,
         profilePhotoUrl: photoToUpdate || (updatedEmp ? updatedEmp.profile_photo_url : null),
         avatar: photoToUpdate || (updatedEmp ? updatedEmp.profile_photo_url : null)
       });
