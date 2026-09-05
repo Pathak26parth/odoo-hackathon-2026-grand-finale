@@ -81,21 +81,36 @@ export const checkContractOverlap = (employeeId, startDate, endDate, excludeId =
 };
 
 export const createContract = async (data) => {
-  const res = await contractService.createContract(data);
-  await fetchContractsAsync();
-  return res;
+  try {
+    const res = await contractService.createContract(data);
+    await fetchContractsAsync();
+    return res;
+  } catch (err) {
+    console.error('Create contract failed on backend:', err.message);
+    throw err;
+  }
 };
 
 export const updateContract = async (id, data) => {
-  const res = await contractService.updateContract(id, data);
-  await fetchContractsAsync();
-  return res;
+  try {
+    const res = await contractService.updateContract(id, data);
+    await fetchContractsAsync();
+    return res;
+  } catch (err) {
+    console.error('Update contract failed on backend:', err.message);
+    throw err;
+  }
 };
 
 export const deleteContract = async (id) => {
-  const res = await contractService.deleteContract(id);
-  const list = getContracts().filter((c) => String(c.id) !== String(id) && c.reference !== id);
-  saveContractsToStorage(list);
-  await fetchContractsAsync();
-  return res;
+  try {
+    const res = await contractService.deleteContract(id);
+    const list = getContracts().filter((c) => String(c.id) !== String(id) && c.reference !== id);
+    saveContractsToStorage(list);
+    await fetchContractsAsync();
+    return res;
+  } catch (err) {
+    console.error('Delete contract failed on backend:', err.message);
+    throw err;
+  }
 };
