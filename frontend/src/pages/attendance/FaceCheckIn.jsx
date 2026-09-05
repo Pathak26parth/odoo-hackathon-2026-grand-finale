@@ -39,6 +39,7 @@ export const FaceCheckIn = () => {
   const [successToast, setSuccessToast] = useState(null);
   const [todayRecordState, setTodayRecordState] = useState(null);
   const [hasCheckedInTodayState, setHasCheckedInTodayState] = useState(false);
+  const [verifiedFrame, setVerifiedFrame] = useState(null);
 
   // Load employees from backend
   useEffect(() => {
@@ -120,6 +121,7 @@ export const FaceCheckIn = () => {
 
       const result = await verifyFace(targetCode, frame);
       if (result.success) {
+        setVerifiedFrame(frame);
         setVerifiedData(result);
         setTodayRecordState(result.todayRecord);
         setHasCheckedInTodayState(result.hasCheckedInToday);
@@ -154,7 +156,13 @@ export const FaceCheckIn = () => {
     const formattedDisplayTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
     try {
-      const frame = cameraRef.current?.captureFrame() || 'live_camera_punch_frame';
+      const captureResult = cameraRef.current?.captureFrame();
+      const frame = (typeof captureResult === 'object' && captureResult?.dataUrl)
+        ? captureResult.dataUrl
+        : (typeof captureResult === 'string' && captureResult.startsWith('data:image')
+          ? captureResult
+          : (verifiedFrame || 'live_camera_punch_frame'));
+
       const targetEmp = verifiedData.employeeId || selectedEmployeeCode;
 
       // 1. Call real backend check-in endpoint
@@ -171,7 +179,9 @@ export const FaceCheckIn = () => {
       });
       setDetectionState('Camera Ready');
     } catch (err) {
-      alert('Error recording check in: ' + (err.message || 'Server error'));
+      setFailureType('Check-in Error');
+      setFailureMessage(err.message || 'Error recording check in. Please try again.');
+      setDetectionState('Verification Failed');
     } finally {
       setIsProcessing(false);
     }
@@ -185,7 +195,13 @@ export const FaceCheckIn = () => {
     const formattedDisplayTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
     try {
-      const frame = cameraRef.current?.captureFrame() || 'live_camera_punch_frame';
+      const captureResult = cameraRef.current?.captureFrame();
+      const frame = (typeof captureResult === 'object' && captureResult?.dataUrl)
+        ? captureResult.dataUrl
+        : (typeof captureResult === 'string' && captureResult.startsWith('data:image')
+          ? captureResult
+          : (verifiedFrame || 'live_camera_punch_frame'));
+
       const targetEmp = verifiedData.employeeId || selectedEmployeeCode;
 
       // 1. Call real backend check-out endpoint
@@ -204,7 +220,9 @@ export const FaceCheckIn = () => {
       });
       setDetectionState('Camera Ready');
     } catch (err) {
-      alert('Error recording check out: ' + (err.message || 'Server error'));
+      setFailureType('Check-out Error');
+      setFailureMessage(err.message || 'Error recording check out. Please try again.');
+      setDetectionState('Verification Failed');
     } finally {
       setIsProcessing(false);
     }
