@@ -35,6 +35,9 @@ export const Employees = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [toastMessage, setToastMessage] = useState('');
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const pageSize = 8;
 
   useEffect(() => {
@@ -52,11 +55,11 @@ export const Employees = () => {
     navigate(`/employees/${emp.id}`);
   };
 
-  const handleDeleteEmployee = async (e, emp) => {
-    if (e && typeof e.stopPropagation === 'function') {
-      e.stopPropagation();
+  const handleDeleteClick = (e, emp) => {
+    if (e) {
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.preventDefault === 'function') e.preventDefault();
     }
-    const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.employeeId || 'this employee';
     const targetId = emp.id || emp.internalId || emp.employeeId;
 
     if (String(targetId) === '1' || emp.employeeId === 'EMP-001') {
@@ -64,20 +67,31 @@ export const Employees = () => {
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to delete ${empName} (${emp.employeeId || targetId})?\n\nThis will permanently remove the employee record, linked user account, contracts, and send a termination notice email.`)) {
-      return;
-    }
+    setDeleteError('');
+    setEmployeeToDelete(emp);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!employeeToDelete) return;
+    const emp = employeeToDelete;
+    const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.employeeId || 'Employee';
+    const targetId = emp.id || emp.internalId || emp.employeeId;
+
+    setIsDeleting(true);
+    setDeleteError('');
     try {
       await deleteEmployee(targetId);
-      setEmployees((prev) => prev.filter((item) => String(item.id) !== String(targetId) && item.employeeId !== emp.employeeId));
+      setEmployees((prev) => prev.filter((item) => String(item.id) !== String(targetId) && item.employeeId !== emp.employeeId && String(item.internalId) !== String(targetId)));
       setToastMessage(`Employee "${empName}" deleted successfully. Official termination notice dispatched.`);
       setTimeout(() => setToastMessage(''), 5000);
+      setEmployeeToDelete(null);
       fetchEmployeesAsync().then((list) => {
         if (Array.isArray(list)) setEmployees(list);
       }).catch(console.error);
     } catch (err) {
-      alert('Error deleting employee: ' + (err.message || 'Failed to delete'));
+      setDeleteError(err.message || 'Failed to delete employee');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -104,7 +118,19 @@ export const Employees = () => {
     currentPage * pageSize
   );
 
-  const departments = ['All', ...new Set(employees.map((e) => e.department).filter(Boolean))];
+  const departments = [
+    'All',
+    'Engineering & Technology',
+    'Engineering',
+    'Human Resources',
+    'Finance & Payroll Operations',
+    'Finance',
+    'Marketing & Growth',
+    'Sales',
+    'Design & UX',
+    'Design',
+    'Operations'
+  ];
 
   // Table columns for List View
   const columns = [
@@ -115,60 +141,59 @@ export const Employees = () => {
         const name = row.name || `${row.firstName || ''} ${row.lastName || ''}`.trim() || 'Employee';
         const avatar = row.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80';
         return (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <img
               src={avatar}
               alt={name}
               className="w-8 h-8 rounded-full object-cover border border-slate-200"
             />
             <div>
-              <span className="font-bold text-slate-900 block leading-tight">{name}</span>
-              <span className="text-[11px] text-slate-400">{row.email || '—'}</span>
+              <span className="font-semibold text-slate-900 block leading-tight">{name}</span>
+              <span className="text-[11px] font-mono text-slate-400">{row.employeeId || `EMP-${row.id}`}</span>
             </div>
           </div>
         );
       }
     },
     {
-      header: 'Job Position',
+      header: 'Role / Position',
       key: 'position',
-      render: (row) => row.position || row.jobPosition || 'Employee',
-      cellClassName: 'text-slate-800 font-semibold'
-    },
-    {
-      header: 'Department',
-      key: 'department',
       render: (row) => (
-        <span className="inline-flex items-center gap-1 text-slate-700 font-medium">
-          <Building className="w-3.5 h-3.5 text-slate-400" />
-          {row.department || row.departmentName || 'General'}
+        <span className="font-medium text-slate-700 text-xs">
+          {row.position || row.jobPosition || 'Employee'}
         </span>
       )
     },
     {
-      header: 'System Role',
-      key: 'role',
+      header: 'System Access',
+      key: 'userRole',
       render: (row) => {
         const r = (row.role || row.userRole || row.user_role || 'EMPLOYEE').toUpperCase();
         switch (r) {
           case 'ADMIN':
-            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
+            return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
           case 'HR_MANAGER':
-            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">HR Manager</span>;
+            return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">HR Manager</span>;
           case 'HR_PAYROLL_ADMIN':
-            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">Payroll Admin</span>;
+            return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200">Payroll Admin</span>;
           case 'HR_PAYROLL_USER':
-            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">Payroll User</span>;
+            return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">Payroll User</span>;
           default:
-            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">Employee</span>;
+            return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">Employee</span>;
         }
       }
     },
     {
+      header: 'Department',
+      key: 'department',
+      cellClassName: 'text-slate-600'
+    },
+    {
       header: 'Manager',
       key: 'manager',
-      render: (row) => row.manager || row.managerName || 'None',
-      cellClassName: 'text-slate-600'
+      render: (row) => (
+        <span className="text-slate-600 text-xs">{row.manager || row.managerName || 'None'}</span>
+      )
     },
     {
       header: 'Status',
@@ -186,6 +211,7 @@ export const Employees = () => {
         return (
           <div className="flex items-center justify-end gap-1.5">
             <button
+              type="button"
               onClick={() => navigate(`/employees/${row.id}`)}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
             >
@@ -193,8 +219,9 @@ export const Employees = () => {
             </button>
             {isHRorAdmin && !isMasterAdmin && (
               <button
-                onClick={(e) => handleDeleteEmployee(e, row)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-lg transition-colors"
+                type="button"
+                onClick={(e) => handleDeleteClick(e, row)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer"
                 title={`Delete ${name}`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -222,50 +249,52 @@ export const Employees = () => {
         title="Employees"
         subtitle={`Directory of team members (${employees.length} total staff)`}
       >
-        {/* Kanban / List Toggle */}
-        <div className="flex items-center p-1 bg-white border border-slate-200 rounded-lg shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setViewMode('kanban')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              viewMode === 'kanban'
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            Kanban
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              viewMode === 'list'
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            List
-          </button>
-        </div>
+        <div className="flex items-center gap-2">
+          {/* Kanban / List Toggle */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                viewMode === 'kanban'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Kanban
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              List
+            </button>
+          </div>
 
-        {/* Add Employee Button (Admin & HR Only) */}
-        {isHRorAdmin && (
-          <button
-            type="button"
-            onClick={handleAddEmployeeClick}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Employee
-          </button>
-        )}
+          {/* Add Employee CTA */}
+          {isHRorAdmin && (
+            <button
+              type="button"
+              onClick={handleAddEmployeeClick}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Employee
+            </button>
+          )}
+        </div>
       </PageHeader>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-        <div className="flex-1 max-w-sm">
+      {/* Filters Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs text-xs">
+        <div className="w-full sm:w-72">
           <SearchInput
             value={searchTerm}
             onChange={(val) => {
@@ -276,17 +305,17 @@ export const Employees = () => {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Department Filter */}
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-medium">Department:</span>
+            <label className="text-slate-500 font-medium">Department:</label>
             <select
               value={deptFilter}
               onChange={(e) => {
                 setDeptFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium"
             >
               {departments.map((dept) => (
                 <option key={dept} value={dept}>
@@ -298,24 +327,26 @@ export const Employees = () => {
 
           {/* Status Filter */}
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-medium">Status:</span>
+            <label className="text-slate-500 font-medium">Status:</label>
             <select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium"
             >
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
+              <option value="On Leave">On Leave</option>
+              <option value="Terminated">Terminated</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* VIEW RENDERING: KANBAN vs LIST */}
+      {/* Main View Area */}
       {filteredEmployees.length === 0 ? (
         <div className="py-16 text-center bg-white rounded-xl border border-slate-200 p-8 shadow-2xs">
           <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -347,19 +378,7 @@ export const Employees = () => {
                       alt={name}
                       className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-2xs"
                     />
-                    <div className="flex items-center gap-1.5">
-                      <StatusBadge status={status} />
-                      {isHRorAdmin && !isMasterAdmin && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteEmployee(e, emp)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-100 hover:border-rose-200 rounded-lg transition-all"
-                          title={`Delete ${name}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    <StatusBadge status={status} />
                   </div>
 
                   <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm truncate">
@@ -405,11 +424,11 @@ export const Employees = () => {
                   {isHRorAdmin && !isMasterAdmin && (
                     <button
                       type="button"
-                      onClick={(e) => handleDeleteEmployee(e, emp)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-md transition-colors"
+                      onClick={(e) => handleDeleteClick(e, emp)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer"
                       title={`Delete ${name}`}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                       Delete
                     </button>
                   )}
@@ -429,6 +448,91 @@ export const Employees = () => {
           onPageChange={setCurrentPage}
           emptyMessage="No employees found"
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {employeeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start gap-3.5 mb-4">
+              <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-900">
+                  Confirm Employee Deletion
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  This will permanently remove the record and trigger employee termination.
+                </p>
+              </div>
+            </div>
+
+            {/* Target Employee Preview Card */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3 mb-4">
+              <img
+                src={employeeToDelete.avatar || employeeToDelete.profilePhotoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'}
+                alt={employeeToDelete.name}
+                className="w-11 h-11 rounded-xl object-cover border border-slate-200"
+              />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-sm text-slate-900 truncate">
+                  {employeeToDelete.name || `${employeeToDelete.firstName || ''} ${employeeToDelete.lastName || ''}`}
+                </h4>
+                <p className="text-xs text-slate-500 truncate">
+                  {employeeToDelete.employeeId} • {employeeToDelete.position || employeeToDelete.jobPosition || 'Employee'}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {employeeToDelete.department || 'General'}
+                </p>
+              </div>
+            </div>
+
+            {/* Warning details */}
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs space-y-1 mb-4">
+              <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-amber-600" />
+                Automated System Actions:
+              </p>
+              <ul className="list-disc list-inside text-[11px] text-amber-700 space-y-0.5 pl-1">
+                <li>Permanently removes employee record & contracts</li>
+                <li>Revokes linked user account & system access</li>
+                <li>Dispatches official termination notice to employee email</li>
+              </ul>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg">
+                {deleteError}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmployeeToDelete(null);
+                  setDeleteError('');
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeleting ? 'Deleting...' : 'Confirm & Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

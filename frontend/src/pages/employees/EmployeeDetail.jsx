@@ -229,28 +229,34 @@ export const EmployeeDetail = () => {
     }
   };
 
-  const handleDeleteEmployee = async () => {
-    const empName = `${formData.firstName} ${formData.lastName}`.trim() || formData.employeeId || 'this employee';
-    const targetId = employee?.id || id;
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
+  const handleDeleteEmployee = () => {
+    const targetId = employee?.id || id;
     if (String(targetId) === '1' || formData.employeeId === 'EMP-001') {
       alert('Safety lock: Primary System Administrator profile cannot be deleted.');
       return;
     }
+    setDeleteError('');
+    setShowDeleteModal(true);
+  };
 
-    if (!window.confirm(`Are you sure you want to delete ${empName} (${formData.employeeId || targetId})?\n\nThis will permanently delete the employee profile, associated user account, contracts, and send a termination notice email.`)) {
-      return;
-    }
+  const handleConfirmDelete = async () => {
+    const empName = `${formData.firstName} ${formData.lastName}`.trim() || formData.employeeId || 'this employee';
+    const targetId = employee?.id || id;
 
     setDeleting(true);
+    setDeleteError('');
     try {
       await deleteEmployee(targetId);
-      setToastMessage(`Employee "${empName}" deleted successfully.`);
+      setToastMessage(`Employee "${empName}" deleted successfully. Official termination notice dispatched.`);
+      setShowDeleteModal(false);
       setTimeout(() => {
         navigate('/employees');
       }, 700);
     } catch (err) {
-      alert('Error deleting employee: ' + (err.message || 'Failed to delete'));
+      setDeleteError(err.message || 'Failed to delete employee');
       setDeleting(false);
     }
   };
@@ -653,6 +659,91 @@ export const EmployeeDetail = () => {
           </div>
         </div>
       </form>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start gap-3.5 mb-4">
+              <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-900">
+                  Confirm Employee Deletion
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  This will permanently remove the record and trigger employee termination.
+                </p>
+              </div>
+            </div>
+
+            {/* Target Employee Preview Card */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3 mb-4">
+              <img
+                src={formData.avatar || DEFAULT_PHOTO}
+                alt={formData.firstName}
+                className="w-11 h-11 rounded-xl object-cover border border-slate-200"
+              />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-sm text-slate-900 truncate">
+                  {formData.firstName} {formData.lastName}
+                </h4>
+                <p className="text-xs text-slate-500 truncate">
+                  {formData.employeeId || `EMP-${id}`} • {formData.position || 'Employee'}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {formData.department || 'General'}
+                </p>
+              </div>
+            </div>
+
+            {/* Warning details */}
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs space-y-1 mb-4">
+              <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-amber-600" />
+                Automated System Actions:
+              </p>
+              <ul className="list-disc list-inside text-[11px] text-amber-700 space-y-0.5 pl-1">
+                <li>Permanently removes employee record & contracts</li>
+                <li>Revokes linked user account & system access</li>
+                <li>Dispatches official termination notice to employee email</li>
+              </ul>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg">
+                {deleteError}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteError('');
+                }}
+                disabled={deleting}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleting ? 'Deleting...' : 'Confirm & Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

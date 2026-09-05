@@ -132,18 +132,20 @@ export const updateEmployee = async (id, data) => {
 export const deleteEmployee = async (id) => {
   try {
     const res = await employeeService.deleteEmployee(id);
-    const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== String(id));
+    const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== String(id) && String(e.internalId) !== String(id));
     saveEmployeesToStorage(list);
     await fetchEmployeesAsync().catch(console.error);
     return res;
   } catch (err) {
-    const errMsg = err.response?.data?.message || err.message || 'Failed to delete employee';
-    console.error('Delete employee failed on backend:', errMsg);
-    if (err.response?.status === 404) {
-      const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== String(id));
+    const isNotFound = err.status === 404 || err.response?.status === 404 || (err.message && err.message.toLowerCase().includes('not found'));
+    if (isNotFound) {
+      const list = getEmployees().filter((e) => String(e.id) !== String(id) && e.employeeId !== String(id) && String(e.internalId) !== String(id));
       saveEmployeesToStorage(list);
-      return true;
+      await fetchEmployeesAsync().catch(console.error);
+      return { success: true, message: 'Employee removed from registry' };
     }
+    const errMsg = err.data?.message || err.message || 'Failed to delete employee';
+    console.error('Delete employee failed on backend:', errMsg);
     throw new Error(errMsg);
   }
 };
