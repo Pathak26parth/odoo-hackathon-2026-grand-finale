@@ -25,9 +25,33 @@ export const FaceCheckIn = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Employees list for Kiosk selection
-  const [employees, setEmployees] = useState(getEmployees());
-  const [selectedEmployeeCode, setSelectedEmployeeCode] = useState('');
+  const isManagerOrAdmin =
+    currentUser?.role === 'Admin' ||
+    currentUser?.role === 'HR Manager' ||
+    currentUser?.role === 'HR Payroll Manager' ||
+    currentUser?.roleRaw === 'ADMIN' ||
+    currentUser?.roleRaw === 'HR_MANAGER' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
+  const selfEmployeeCode =
+    currentUser?.employeeId ||
+    (currentUser?.internalEmployeeId ? `EMP-${String(currentUser.internalEmployeeId).padStart(3, '0')}` : '');
+
+  // Employees list for Kiosk selection: locked to currentUser for regular employees
+  const [employees, setEmployees] = useState(() => {
+    if (!isManagerOrAdmin && currentUser) {
+      return [{
+        id: String(currentUser?.internalEmployeeId || currentUser?.id || '1'),
+        employeeId: selfEmployeeCode,
+        name: currentUser?.name || currentUser?.employeeName || 'Employee',
+        department: currentUser?.department || 'General',
+        position: currentUser?.position || 'Staff',
+        avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+      }];
+    }
+    return isManagerOrAdmin ? getEmployees() : [];
+  });
+  const [selectedEmployeeCode, setSelectedEmployeeCode] = useState(selfEmployeeCode);
 
   // Kiosk face detection state machine:
   // 'Camera Ready' | 'Looking for Face' | 'Face Detected' | 'Verifying Identity' | 'Identity Verified' | 'Verification Failed'
@@ -45,6 +69,32 @@ export const FaceCheckIn = () => {
   useEffect(() => {
     let mounted = true;
     const loadEmps = async () => {
+      const isPrivileged =
+        currentUser?.role === 'Admin' ||
+        currentUser?.role === 'HR Manager' ||
+        currentUser?.role === 'HR Payroll Manager' ||
+        currentUser?.roleRaw === 'ADMIN' ||
+        currentUser?.roleRaw === 'HR_MANAGER' ||
+        currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
+      if (!isPrivileged) {
+        // Strict Boundary: Regular employee can only see and punch for themselves
+        const selfCode = currentUser?.employeeId || `EMP-${String(currentUser?.internalEmployeeId || '001').padStart(3, '0')}`;
+        const selfEmp = {
+          id: String(currentUser?.internalEmployeeId || currentUser?.id),
+          employeeId: selfCode,
+          name: currentUser?.name || currentUser?.employeeName || 'Employee',
+          department: currentUser?.department || 'General',
+          position: currentUser?.position || 'Staff',
+          avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+        };
+        if (mounted) {
+          setEmployees([selfEmp]);
+          setSelectedEmployeeCode(selfCode);
+        }
+        return;
+      }
+
       try {
         const empList = await employeeService.getAllEmployees();
         if (mounted && Array.isArray(empList) && empList.length > 0) {
@@ -86,7 +136,18 @@ export const FaceCheckIn = () => {
 
   // Trigger automated face detection and 1:1 verification
   const handleStartScan = async (empCodeToScan) => {
-    const targetCode = empCodeToScan || selectedEmployeeCode || employees[0]?.employeeId || 'EMP-001';
+    const isPrivileged =
+      currentUser?.role === 'Admin' ||
+      currentUser?.role === 'HR Manager' ||
+      currentUser?.role === 'HR Payroll Manager' ||
+      currentUser?.roleRaw === 'ADMIN' ||
+      currentUser?.roleRaw === 'HR_MANAGER' ||
+      currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
+    const selfCode = currentUser?.employeeId || employees[0]?.employeeId || 'EMP-001';
+    const targetCode = isPrivileged
+      ? (empCodeToScan || selectedEmployeeCode || selfCode)
+      : selfCode;
     
     setFailureType(null);
     setFailureMessage('');
@@ -237,10 +298,12 @@ export const FaceCheckIn = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-blue-600" />
-            Face Attendance Kiosk
+            {isManagerOrAdmin ? 'Face Attendance Kiosk' : 'Face Attendance Verification'}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Instant biometric face verification and kiosk attendance check-in / check-out.
+            {isManagerOrAdmin
+              ? 'Instant biometric face verification and kiosk attendance check-in / check-out.'
+              : 'Instant biometric face verification and contactless attendance punch for your account.'}
           </p>
         </div>
 
@@ -292,22 +355,29 @@ export const FaceCheckIn = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <select
-            id="kiosk-employee-select"
-            value={selectedEmployeeCode}
-            onChange={(e) => {
-              const newCode = e.target.value;
-              setSelectedEmployeeCode(newCode);
-              handleStartScan(newCode);
-            }}
-            className="px-3 py-2 text-xs font-medium rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-56"
-          >
-            {employees.map((emp) => (
-              <option key={emp.employeeId || emp.id} value={emp.employeeId}>
-                {emp.name} ({emp.employeeId}) — {emp.department}
-              </option>
-            ))}
-          </select>
+          {!isManagerOrAdmin ? (
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-800 shadow-2xs">
+              <User className="w-4 h-4 text-blue-600" />
+              <span>Personal Attendance</span>
+            </div>
+          ) : (
+            <select
+              id="kiosk-employee-select"
+              value={selectedEmployeeCode}
+              onChange={(e) => {
+                const newCode = e.target.value;
+                setSelectedEmployeeCode(newCode);
+                handleStartScan(newCode);
+              }}
+              className="px-3 py-2 text-xs font-medium rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-56"
+            >
+              {employees.map((emp) => (
+                <option key={emp.employeeId || emp.id} value={emp.employeeId}>
+                  {emp.name} ({emp.employeeId}) — {emp.department}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button
             type="button"
@@ -335,13 +405,23 @@ export const FaceCheckIn = () => {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => handleStartScan(selectedEmployeeCode)}
-            className="px-3 py-1.5 text-xs font-medium text-emerald-800 bg-white hover:bg-emerald-100 rounded-lg border border-emerald-300 transition-colors"
-          >
-            Next Employee
-          </button>
+          {isManagerOrAdmin ? (
+            <button
+              type="button"
+              onClick={() => handleStartScan(selectedEmployeeCode)}
+              className="px-3 py-1.5 text-xs font-medium text-emerald-800 bg-white hover:bg-emerald-100 rounded-lg border border-emerald-300 transition-colors"
+            >
+              Next Employee
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSuccessToast(null)}
+              className="px-3 py-1.5 text-xs font-medium text-emerald-800 bg-white hover:bg-emerald-100 rounded-lg border border-emerald-300 transition-colors"
+            >
+              Dismiss
+            </button>
+          )}
         </div>
       )}
 

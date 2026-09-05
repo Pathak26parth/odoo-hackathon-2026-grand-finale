@@ -233,6 +233,27 @@ async function runTests() {
     });
     assert(faceCheckIn.status === 201 || faceCheckIn.status === 400, 'Face check-in endpoint handles verification & punch logic');
 
+    // Security Boundary: Employee attempts to face check-in for another employee (e.g. employeeId: 1)
+    const unauthorizedFaceCheck = await request('/api/attendance/face-check-in', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: {
+        employeeId: 1,
+        faceInput: 'live_webcam_frame_data_hash'
+      }
+    });
+    assert(unauthorizedFaceCheck.status === 403, 'Employee strictly blocked from face check-in for another employee (403 Forbidden)');
+
+    // Security Boundary: Employee attempts to manual check-in for another employee (e.g. employeeId: 1)
+    const unauthorizedCheckIn = await request('/api/attendance/check-in', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: {
+        employeeId: 1
+      }
+    });
+    assert(unauthorizedCheckIn.status === 403, 'Employee strictly blocked from manual check-in for another employee (403 Forbidden)');
+
     // -----------------------------------------------------------------
     // TEST 6: Time Off Allocation & Approvals
     // -----------------------------------------------------------------
