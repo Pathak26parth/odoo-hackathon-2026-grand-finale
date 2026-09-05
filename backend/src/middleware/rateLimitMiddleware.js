@@ -8,7 +8,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 1000 : 100, // Generous in development
+  max: isDev ? 5000 : 100, // Generous in development
+  skip: () => isDev,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -19,7 +20,8 @@ const authLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 10000 : 500,
+  max: isDev ? 50000 : 500,
+  skip: (req) => isDev || req.path === '/health',
   standardHeaders: true,
   legacyHeaders: false
 });

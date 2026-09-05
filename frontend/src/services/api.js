@@ -83,7 +83,12 @@ async function request(endpoint, options = {}) {
       error.data = data;
 
       // Automatically handle token expiration / invalid token
-      if (response.status === 401 && !cleanEndpoint.includes('/auth/login')) {
+      if (
+        response.status === 401 &&
+        !cleanEndpoint.includes('/auth/login') &&
+        !cleanEndpoint.includes('/auth/logout') &&
+        !cleanEndpoint.includes('/auth/refresh')
+      ) {
         // Trigger potential refresh or logout
         window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       }

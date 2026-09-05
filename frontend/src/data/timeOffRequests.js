@@ -37,7 +37,7 @@ export const saveTimeOffRequestsToStorage = (list) => {
 export const fetchTimeOffRequestsAsync = async (params = {}) => {
   try {
     const requests = await timeOffService.getRequests(params);
-    if (requests && requests.length > 0) {
+    if (Array.isArray(requests)) {
       saveTimeOffRequestsToStorage(requests);
       return requests;
     }

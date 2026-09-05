@@ -28,7 +28,7 @@ export const saveContractsToStorage = (list) => {
 export const fetchContractsAsync = async (params = {}) => {
   try {
     const contracts = await contractService.getContracts(params);
-    if (contracts && contracts.length > 0) {
+    if (Array.isArray(contracts)) {
       saveContractsToStorage(contracts);
       return contracts;
     }

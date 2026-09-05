@@ -40,15 +40,15 @@ export const Payslips = () => {
     setEmployees(getEmployees());
 
     fetchPayslipsAsync().then((slips) => {
-      if (slips && slips.length > 0) setPayslips(slips);
+      if (Array.isArray(slips)) setPayslips(slips);
     }).catch(console.error);
 
     fetchPayrunsAsync().then((runs) => {
-      if (runs && runs.length > 0) setPayruns(runs);
+      if (Array.isArray(runs)) setPayruns(runs);
     }).catch(console.error);
 
     fetchEmployeesAsync().then((emps) => {
-      if (emps && emps.length > 0) setEmployees(emps);
+      if (Array.isArray(emps)) setEmployees(emps);
     }).catch(console.error);
   }, []);
 
@@ -206,7 +206,7 @@ export const Payslips = () => {
                   {slip.period}
                 </td>
                 <td className="py-3 px-4 text-center font-semibold text-slate-800">
-                  {slip.workedDays || 22}
+                  {slip.workedDays !== undefined && slip.workedDays !== null ? slip.workedDays : '-'}
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-slate-700">
                   {formatCurrency(slip.basic)}

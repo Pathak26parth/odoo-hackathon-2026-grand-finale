@@ -4,14 +4,14 @@ import { Clock, CheckCircle2, AlertCircle, Sparkles, UserCheck, AlertTriangle } 
 
 export const AttendanceOverview = ({ attendanceStats = {} }) => {
   const {
-    present = 45,
-    late = 3,
-    absent = 1,
-    overtime = 4,
-    missingCheckouts = 2,
-    manualEdits = 1,
-    faceRecognitionCheckins = 38,
-    coverage = 97.8
+    present = 0,
+    late = 0,
+    absent = 0,
+    overtime = 0,
+    missingCheckouts = 0,
+    manualEdits = 0,
+    faceRecognitionCheckins = 0,
+    coverage = 0
   } = attendanceStats;
 
   const items = [

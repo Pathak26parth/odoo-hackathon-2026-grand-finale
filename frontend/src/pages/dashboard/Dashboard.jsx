@@ -1,4 +1,3 @@
-// pages/dashboard/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
@@ -18,6 +17,7 @@ import { getFaceHistory, fetchFaceHistoryAsync } from '../../data/faceAttendance
 import { getTimeOffRequests, fetchTimeOffRequestsAsync } from '../../data/timeOffRequests';
 import { getPayruns, fetchPayrunsAsync } from '../../data/payruns';
 import { getPayslips, fetchPayslipsAsync } from '../../data/payslips';
+import dashboardService from '../../services/dashboardService';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 import { MetricCard } from '../../components/dashboard/MetricCard';
@@ -42,6 +42,7 @@ export const Dashboard = () => {
   const [timeOff, setTimeOff] = useState([]);
   const [payruns, setPayruns] = useState([]);
   const [payslips, setPayslips] = useState([]);
+  const [dashboardData, setDashboardData] = useState(null);
 
   useEffect(() => {
     setEmployees(getEmployees());
@@ -53,13 +54,14 @@ export const Dashboard = () => {
     setPayslips(getPayslips());
 
     // Async hydration from backend
-    fetchEmployeesAsync().then((res) => { if (res?.length) setEmployees(res); }).catch(console.error);
-    fetchContractsAsync().then((res) => { if (res?.length) setContracts(res); }).catch(console.error);
-    fetchAttendanceRecordsAsync().then((res) => { if (res?.length) setAttendance(res); }).catch(console.error);
-    fetchFaceHistoryAsync().then((res) => { if (res?.length) setFaceHistory(res); }).catch(console.error);
-    fetchTimeOffRequestsAsync().then((res) => { if (res?.length) setTimeOff(res); }).catch(console.error);
-    fetchPayrunsAsync().then((res) => { if (res?.length) setPayruns(res); }).catch(console.error);
-    fetchPayslipsAsync().then((res) => { if (res?.length) setPayslips(res); }).catch(console.error);
+    dashboardService.getDashboardData().then((res) => { if (res) setDashboardData(res); }).catch(console.error);
+    fetchEmployeesAsync().then((res) => { if (Array.isArray(res)) setEmployees(res); }).catch(console.error);
+    fetchContractsAsync().then((res) => { if (Array.isArray(res)) setContracts(res); }).catch(console.error);
+    fetchAttendanceRecordsAsync().then((res) => { if (Array.isArray(res)) setAttendance(res); }).catch(console.error);
+    fetchFaceHistoryAsync().then((res) => { if (Array.isArray(res)) setFaceHistory(res); }).catch(console.error);
+    fetchTimeOffRequestsAsync().then((res) => { if (Array.isArray(res)) setTimeOff(res); }).catch(console.error);
+    fetchPayrunsAsync().then((res) => { if (Array.isArray(res)) setPayruns(res); }).catch(console.error);
+    fetchPayslipsAsync().then((res) => { if (Array.isArray(res)) setPayslips(res); }).catch(console.error);
   }, []);
 
   // Filtered employees
@@ -68,102 +70,124 @@ export const Dashboard = () => {
     const matchesType =
       employeeTypeFilter === 'All' ||
       (employeeTypeFilter === 'Full-Time' && e.status === 'Active') ||
-      (employeeTypeFilter === 'Contractor' && e.position.includes('Contract'));
+      (employeeTypeFilter === 'Contractor' && (e.position || '').includes('Contract'));
     return matchesDept && matchesType;
   });
 
-  const filteredEmpIds = filteredEmployees.map((e) => e.id);
-
   // Dynamic calculations
-  // 1. Total Net Salary Paid (from paid payruns / payslips)
   const paidPayslips = payslips.filter(
     (s) => s.status === 'Paid' && (departmentFilter === 'All' || s.department === departmentFilter)
   );
-  const totalNetPaid = paidPayslips.reduce((sum, s) => sum + (Number(s.net) || 0), 0) || 1275000;
 
-  // 2. Payslips Generated
-  const payslipsCount = payslips.filter(
-    (s) => departmentFilter === 'All' || s.department === departmentFilter
-  ).length;
-
-  // 3. Average Salary
   const activeContracts = contracts.filter(
     (c) =>
       c.status === 'Active' &&
       (departmentFilter === 'All' || c.department === departmentFilter)
   );
   const totalWages = activeContracts.reduce((sum, c) => sum + (Number(c.wage) || 0), 0);
-  const avgSalary = activeContracts.length > 0 ? Math.round(totalWages / activeContracts.length) : 6340;
 
-  // 4. Approved Time Off
   const approvedRequests = timeOff.filter(
     (r) =>
       r.status === 'Approved' &&
       (departmentFilter === 'All' || r.department === departmentFilter)
   );
-  const totalApprovedDays = approvedRequests.reduce((sum, r) => sum + (Number(r.duration) || 0), 0) || 14;
 
-  // 5. Attendance Health (% on time / present)
   const deptAttendance = attendance.filter(
     (a) => departmentFilter === 'All' || a.department === departmentFilter
   );
   const onTimeCount = deptAttendance.filter((a) => a.status === 'Present' || a.status === 'Overtime').length;
-  const attendanceHealth =
-    deptAttendance.length > 0
-      ? Math.round((onTimeCount / deptAttendance.length) * 1000) / 10
-      : 96.4;
 
-  // Department Salary Distribution
-  const departments = ['Engineering', 'Human Resources', 'Finance', 'Sales', 'Design'];
-  const departmentSalaryData = departments.map((dept) => {
-    const deptSlips = payslips.filter((s) => s.department === dept);
-    const amount = deptSlips.reduce((sum, s) => sum + (Number(s.gross) || 0), 0) || (dept === 'Engineering' ? 480000 : dept === 'Finance' ? 240000 : 180000);
-    return {
-      department: dept,
-      amount,
-      percentage: Math.round((amount / (totalNetPaid * 1.15 || 1450000)) * 100) || 20
-    };
-  });
+  // Real KPI metrics from backend with dynamic record fallbacks (no static numbers)
+  const totalNetPaid = dashboardData?.kpi?.totalNetSalaryPaid ?? paidPayslips.reduce((sum, s) => sum + (Number(s.net) || 0), 0);
+  const payslipsCount = dashboardData?.kpi?.payslipsGenerated ?? payslips.filter((s) => departmentFilter === 'All' || s.department === departmentFilter).length;
+  const avgSalary = dashboardData?.kpi?.averageSalary ?? (activeContracts.length > 0 ? Math.round(totalWages / activeContracts.length) : 0);
+  const totalApprovedDays = dashboardData?.kpi?.approvedLeaveDays ?? approvedRequests.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+  const attendanceHealth = dashboardData?.kpi?.attendanceHealthScore ?? (deptAttendance.length > 0 ? Math.round((onTimeCount / deptAttendance.length) * 1000) / 10 : 0);
 
-  // Payrun status counts
-  const draftPayruns = payruns.filter((p) => p.status === 'Draft').length;
-  const computedPayruns = payruns.filter((p) => p.status === 'Computed').length;
-  const validatedPayruns = payruns.filter((p) => p.status === 'Validated').length;
-  const paidPayruns = payruns.filter((p) => p.status === 'Paid').length;
+  // Real Alerts computed from live records and backend checks
+  const realAlerts = [];
+  if (dashboardData?.alerts?.missingBankDetails > 0) {
+    realAlerts.push({
+      type: 'Missing Bank Details',
+      message: `${dashboardData.alerts.missingBankDetails} active employee(s) require bank account or IFSC update.`,
+      level: 'warning'
+    });
+  }
+  if (dashboardData?.alerts?.missingActiveContracts > 0) {
+    realAlerts.push({
+      type: 'Missing Active Contracts',
+      message: `${dashboardData.alerts.missingActiveContracts} active employee(s) have no active employment contract assigned.`,
+      level: 'warning'
+    });
+  }
+  if (dashboardData?.alerts?.pendingTimeOffRequests > 0) {
+    realAlerts.push({
+      type: 'Pending Leave Approvals',
+      message: `${dashboardData.alerts.pendingTimeOffRequests} time off request(s) awaiting managerial review.`,
+      level: 'info'
+    });
+  }
 
   // Attendance metrics
   const attendanceStats = {
-    present: deptAttendance.filter((a) => a.status === 'Present').length || 18,
-    late: deptAttendance.filter((a) => a.status === 'Late').length || 2,
-    absent: deptAttendance.filter((a) => a.status === 'Absent').length || 1,
-    overtime: deptAttendance.filter((a) => a.status === 'Overtime').length || 2,
-    missingCheckouts: deptAttendance.filter((a) => a.status === 'Missing Check-out').length || 1,
-    manualEdits: deptAttendance.filter((a) => a.isManualEdit || a.status === 'Manual Edit').length || 1,
-    faceRecognitionCheckins: faceHistory.length || 15,
+    present: dashboardData?.attendanceOverview?.presentOnTime ?? deptAttendance.filter((a) => a.status === 'Present').length,
+    late: dashboardData?.attendanceOverview?.lateArrivals ?? deptAttendance.filter((a) => a.status === 'Late').length,
+    absent: deptAttendance.filter((a) => a.status === 'Absent').length,
+    overtime: dashboardData?.attendanceOverview ? Math.round(dashboardData.attendanceOverview.totalOvertimeHours) : deptAttendance.filter((a) => a.status === 'Overtime').length,
+    missingCheckouts: dashboardData?.attendanceOverview?.missingCheckouts ?? deptAttendance.filter((a) => a.status === 'Missing Check-out').length,
+    manualEdits: dashboardData?.attendanceOverview?.manualCorrections ?? deptAttendance.filter((a) => a.isManualEdit || a.status === 'Manual Edit').length,
+    faceRecognitionCheckins: faceHistory.length,
     coverage: attendanceHealth
   };
 
   // Time off metrics
   const timeOffStats = {
     approvedDays: totalApprovedDays,
-    pendingRequests: timeOff.filter((r) => r.status === 'Pending').length || 2,
-    refusedRequests: timeOff.filter((r) => r.status === 'Refused').length || 1,
-    remainingBalance: 142
+    pendingRequests: dashboardData?.alerts?.pendingTimeOffRequests ?? timeOff.filter((r) => r.status === 'Pending').length,
+    refusedRequests: timeOff.filter((r) => r.status === 'Refused').length,
+    remainingBalance: timeOff.reduce((acc, r) => acc + (r.remainingDays || 0), 0)
   };
 
-  // Department Table Rows
-  const departmentRows = departments.map((dept) => {
-    const count = employees.filter((e) => e.department === dept).length || 2;
-    const deptSlips = payslips.filter((s) => s.department === dept);
-    const totalExp = deptSlips.reduce((sum, s) => sum + (Number(s.gross) || 0), 0) || count * 62000;
-    return {
-      department: dept,
-      headcount: count,
-      totalExpenditure: totalExp,
-      averageSalary: Math.round(totalExp / count),
-      attendancePct: 96 + (dept === 'Engineering' ? 2 : 0)
-    };
-  });
+  // Department Breakdown Table Rows
+  const departmentRows = dashboardData?.departmentBreakdown && dashboardData.departmentBreakdown.length > 0
+    ? dashboardData.departmentBreakdown.map((d) => ({
+        department: d.department_name,
+        headcount: parseInt(d.employee_count, 10) || 0,
+        totalExpenditure: parseFloat(d.total_salary_cost) || 0,
+        averageSalary: Math.round(parseFloat(d.average_salary) || 0),
+        attendancePct: attendanceHealth || 0
+      }))
+    : ['Engineering & Technology', 'Human Resources', 'Finance & Payroll Operations', 'Marketing & Growth'].map((dept) => {
+        const count = employees.filter((e) => e.department === dept).length;
+        const deptSlips = payslips.filter((s) => s.department === dept);
+        const totalExp = deptSlips.reduce((sum, s) => sum + (Number(s.gross) || 0), 0);
+        return {
+          department: dept,
+          headcount: count,
+          totalExpenditure: totalExp,
+          averageSalary: count > 0 ? Math.round(totalExp / count) : 0,
+          attendancePct: attendanceHealth || 0
+        };
+      });
+
+  // Department Salary Distribution
+  const departmentSalaryData = departmentRows.map((d) => ({
+    department: d.department,
+    amount: d.totalExpenditure,
+    percentage: totalNetPaid > 0 ? Math.round((d.totalExpenditure / totalNetPaid) * 100) : 0
+  }));
+
+  // Monthly trends for chart
+  const monthlyTrendsData = dashboardData?.monthlyTrends?.map((m) => ({
+    month: m.month_label || m.month,
+    net: parseFloat(m.total_net_paid) || 0
+  })) || [];
+
+  // Payrun status counts
+  const draftPayruns = payruns.filter((p) => p.status === 'Draft').length;
+  const computedPayruns = payruns.filter((p) => p.status === 'Computed').length;
+  const validatedPayruns = payruns.filter((p) => p.status === 'Validated').length;
+  const paidPayruns = payruns.filter((p) => p.status === 'Paid').length;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">

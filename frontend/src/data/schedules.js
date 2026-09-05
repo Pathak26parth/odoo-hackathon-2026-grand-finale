@@ -20,24 +20,16 @@ export const calculateDailyHours = (startTime, endTime, breakDuration = 0, worki
   return Math.max(0, Math.round((totalMin / 60) * 10) / 10);
 };
 
-export const INITIAL_SCHEDULES = [
-  {
-    id: '1',
-    name: 'Standard 40 Hours',
-    type: 'Full-time',
-    weeklyHours: 40,
-    status: 'Active',
-    assignedEmployees: 1,
-    days: DEFAULT_WEEK_DAYS
-  }
-];
+export const INITIAL_SCHEDULES = [];
 
 export const getSchedules = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((s) => s && (s.assignedEmployees !== 1 || s.type !== 'Full-time'));
+      }
     }
   } catch (err) {
     console.error('Error reading schedules cache:', err);
@@ -56,7 +48,7 @@ export const saveSchedulesToStorage = (list) => {
 export const fetchSchedulesAsync = async () => {
   try {
     const schedules = await scheduleService.getSchedules();
-    if (schedules && schedules.length > 0) {
+    if (Array.isArray(schedules)) {
       saveSchedulesToStorage(schedules);
       return schedules;
     }

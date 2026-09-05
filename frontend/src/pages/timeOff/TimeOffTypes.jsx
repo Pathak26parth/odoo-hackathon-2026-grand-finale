@@ -25,7 +25,7 @@ export const TimeOffTypes = () => {
   const loadData = () => {
     setTypes(getTimeOffTypes());
     fetchTimeOffTypesAsync().then((list) => {
-      if (list && list.length > 0) setTypes(list);
+      if (Array.isArray(list)) setTypes(list);
     }).catch(console.error);
   };
 

@@ -25,12 +25,14 @@ export const authService = {
   },
 
   async logout() {
-    try {
-      await api.post('/auth/logout');
-    } catch {
-      // ignore
-    } finally {
-      clearStoredTokens();
+    const token = getStoredToken();
+    clearStoredTokens();
+    if (token) {
+      try {
+        await api.post('/auth/logout');
+      } catch {
+        // ignore network or auth errors on logout
+      }
     }
   },
 

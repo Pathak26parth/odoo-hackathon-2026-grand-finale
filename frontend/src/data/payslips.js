@@ -33,7 +33,7 @@ export const savePayslipsToStorage = (list) => {
 export const fetchPayslipsAsync = async (params = {}) => {
   try {
     const payslips = await payrollService.getPayslips(params);
-    if (payslips && payslips.length > 0) {
+    if (Array.isArray(payslips)) {
       savePayslipsToStorage(payslips);
       return payslips;
     }

@@ -27,11 +27,11 @@ export const Contracts = () => {
     setEmployees(getEmployees());
 
     fetchContractsAsync().then((list) => {
-      if (list && list.length > 0) setContracts(list);
+      if (Array.isArray(list)) setContracts(list);
     }).catch(console.error);
 
     fetchEmployeesAsync().then((list) => {
-      if (list && list.length > 0) setEmployees(list);
+      if (Array.isArray(list)) setEmployees(list);
     }).catch(console.error);
   }, []);
 

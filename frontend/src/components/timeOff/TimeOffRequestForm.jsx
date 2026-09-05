@@ -15,11 +15,11 @@ export const TimeOffRequestForm = ({
   const defaultEmp = employees.find((e) => e.id === currentEmployeeId) || employees[0] || {};
 
   const [formData, setFormData] = useState({
-    employeeId: defaultEmp.id || 'emp-1',
-    employeeName: defaultEmp.name || 'Amelia Johnson',
-    department: defaultEmp.department || 'Engineering',
-    timeOffTypeId: timeOffTypes[0]?.id || 'tot-1',
-    timeOffTypeName: timeOffTypes[0]?.name || 'Annual Leave',
+    employeeId: defaultEmp.id || '',
+    employeeName: defaultEmp.name || '',
+    department: defaultEmp.department || '',
+    timeOffTypeId: timeOffTypes[0]?.id || '',
+    timeOffTypeName: timeOffTypes[0]?.name || '',
     unit: timeOffTypes[0]?.unit || 'Days',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],

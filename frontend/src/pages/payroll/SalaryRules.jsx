@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, SlidersHorizontal, Check, ShieldAlert } from 'lucide-react';
-import { getSalaryRules, deleteSalaryRule } from '../../data/salaryRules';
+import { getSalaryRules, deleteSalaryRule, fetchSalaryRulesAsync } from '../../data/salaryRules';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -35,6 +35,9 @@ export const SalaryRules = () => {
 
   useEffect(() => {
     loadData();
+    fetchSalaryRulesAsync().then((list) => {
+      if (Array.isArray(list)) setRules(list);
+    }).catch(console.error);
   }, []);
 
   if (!hasAccess) {

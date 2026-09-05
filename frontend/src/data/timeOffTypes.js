@@ -28,7 +28,7 @@ export const saveTimeOffTypesToStorage = (list) => {
 export const fetchTimeOffTypesAsync = async () => {
   try {
     const types = await timeOffService.getTimeOffTypes();
-    if (types && types.length > 0) {
+    if (Array.isArray(types)) {
       saveTimeOffTypesToStorage(types);
       return types;
     }

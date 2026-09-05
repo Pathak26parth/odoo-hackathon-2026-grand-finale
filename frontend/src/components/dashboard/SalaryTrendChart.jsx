@@ -3,25 +3,29 @@ import React from 'react';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 export const SalaryTrendChart = ({ monthlyData = [] }) => {
-  // default data: [
-  //   { month: 'Apr', net: 1180000 },
-  //   { month: 'May', net: 1210000 },
-  //   { month: 'Jun', net: 1225000 },
-  //   { month: 'Jul', net: 1240000 },
-  //   { month: 'Aug', net: 1255000 },
-  //   { month: 'Sep', net: 1275000 }
-  // ]
-  const points = monthlyData.length > 0 ? monthlyData : [
-    { month: 'Apr', net: 1180000 },
-    { month: 'May', net: 1210000 },
-    { month: 'Jun', net: 1225000 },
-    { month: 'Jul', net: 1240000 },
-    { month: 'Aug', net: 1255000 },
-    { month: 'Sep', net: 1275000 }
-  ];
+  const points = monthlyData;
+
+  if (!points || points.length < 2) {
+    return (
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Monthly Net Salary Trend</h3>
+            <p className="text-xs text-slate-500">Historical net payroll disbursement trajectory</p>
+          </div>
+        </div>
+        <div className="py-12 text-center text-xs text-slate-400">
+          No validated historical payroll periods to plot trajectory yet. Complete and validate payruns to generate trend curve.
+        </div>
+      </div>
+    );
+  }
 
   const minNet = Math.min(...points.map((p) => p.net)) * 0.95;
   const maxNet = Math.max(...points.map((p) => p.net)) * 1.05;
+  const firstNet = points[0]?.net || 1;
+  const lastNet = points[points.length - 1]?.net || 0;
+  const growthPct = firstNet > 0 ? (((lastNet - firstNet) / firstNet) * 100).toFixed(1) : '0';
 
   // SVG dimensions
   const svgWidth = 500;
@@ -34,7 +38,7 @@ export const SalaryTrendChart = ({ monthlyData = [] }) => {
     const y =
       svgHeight -
       paddingY -
-      ((value - minNet) / (maxNet - minNet)) * (svgHeight - 2 * paddingY);
+      ((value - minNet) / (maxNet - minNet || 1)) * (svgHeight - 2 * paddingY);
     return { x, y };
   };
 
@@ -53,10 +57,14 @@ export const SalaryTrendChart = ({ monthlyData = [] }) => {
       <div className="flex items-center justify-between pb-2 border-b border-slate-100">
         <div>
           <h3 className="text-sm font-bold text-slate-900">Monthly Net Salary Trend</h3>
-          <p className="text-xs text-slate-500">6-Month Net payroll disbursement trajectory (Apr — Sep 2026)</p>
+          <p className="text-xs text-slate-500">Net payroll disbursement trajectory ({points[0]?.month} — {points[points.length - 1]?.month})</p>
         </div>
-        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-          +8.05% Growth
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
+          Number(growthPct) >= 0 
+            ? 'text-emerald-600 bg-emerald-50 border-emerald-200' 
+            : 'text-rose-600 bg-rose-50 border-rose-200'
+        }`}>
+          {Number(growthPct) >= 0 ? `+${growthPct}%` : `${growthPct}%`} Trend
         </span>
       </div>
 

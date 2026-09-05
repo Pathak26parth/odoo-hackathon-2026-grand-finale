@@ -19,7 +19,7 @@ export const Users = () => {
   useEffect(() => {
     setUsers(getUsers());
     fetchUsersAsync().then((list) => {
-      if (list && list.length > 0) setUsers(list);
+      if (Array.isArray(list)) setUsers(list);
     }).catch(console.error);
   }, []);
 

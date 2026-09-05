@@ -10,15 +10,15 @@ import {
   Building2,
   FileSpreadsheet
 } from 'lucide-react';
-import { getEmployees } from '../../data/employees';
-import { getAttendanceRecords } from '../../data/attendance';
-import { getFaceHistory } from '../../data/faceAttendance';
-import { getTimeOffRequests } from '../../data/timeOffRequests';
-import { getPayslips } from '../../data/payslips';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import { getAttendanceRecords, fetchAttendanceRecordsAsync } from '../../data/attendance';
+import { getFaceHistory, fetchFaceHistoryAsync } from '../../data/faceAttendance';
+import { getTimeOffRequests, fetchTimeOffRequestsAsync } from '../../data/timeOffRequests';
+import { getPayslips, fetchPayslipsAsync } from '../../data/payslips';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 export const Reports = () => {
-  const [periodFilter, setPeriodFilter] = useState('September 2026');
+  const [periodFilter, setPeriodFilter] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState('All');
 
@@ -34,49 +34,93 @@ export const Reports = () => {
     setFaceHistory(getFaceHistory());
     setTimeOff(getTimeOffRequests());
     setPayslips(getPayslips());
+
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+
+    fetchAttendanceRecordsAsync().then((list) => {
+      if (Array.isArray(list)) setAttendance(list);
+    }).catch(console.error);
+
+    fetchFaceHistoryAsync().then((list) => {
+      if (Array.isArray(list)) setFaceHistory(list);
+    }).catch(console.error);
+
+    fetchTimeOffRequestsAsync().then((list) => {
+      if (Array.isArray(list)) setTimeOff(list);
+    }).catch(console.error);
+
+    fetchPayslipsAsync().then((list) => {
+      if (Array.isArray(list)) setPayslips(list);
+    }).catch(console.error);
   }, []);
 
+  // Distinct departments from live records
+  const availableDepartments = [
+    ...new Set([
+      ...employees.map((e) => e.department).filter(Boolean),
+      ...payslips.map((s) => s.department).filter(Boolean)
+    ])
+  ].sort();
+
+  // Distinct periods from payslips
+  const availablePeriods = [
+    ...new Set(payslips.map((s) => s.period).filter(Boolean))
+  ].sort();
+
   // Filtered dataset
-  const filteredPayslips = payslips.filter(
-    (s) => departmentFilter === 'All' || s.department === departmentFilter
-  );
-  const totalGross = filteredPayslips.reduce((acc, s) => acc + (Number(s.gross) || 0), 0) || 1450000;
-  const totalDeductions = filteredPayslips.reduce((acc, s) => acc + (Number(s.deductions) || 0), 0) || 175000;
+  const filteredPayslips = payslips.filter((s) => {
+    const matchDept = departmentFilter === 'All' || s.department === departmentFilter;
+    const matchPeriod = periodFilter === 'All' || s.period === periodFilter;
+    return matchDept && matchPeriod;
+  });
+
+  const totalGross = filteredPayslips.reduce((acc, s) => acc + (Number(s.gross) || 0), 0);
+  const totalDeductions = filteredPayslips.reduce((acc, s) => acc + (Number(s.deductions) || 0), 0);
   const totalNet = totalGross - totalDeductions;
   const totalCost = totalGross;
 
   // Attendance metrics
-  const filteredAttendance = attendance.filter(
-    (a) => departmentFilter === 'All' || a.department === departmentFilter
-  );
-  const presentCount = filteredAttendance.filter((a) => a.status === 'Present').length || 18;
-  const lateCount = filteredAttendance.filter((a) => a.status === 'Late').length || 2;
-  const absentCount = filteredAttendance.filter((a) => a.status === 'Absent').length || 1;
-  const overtimeCount = filteredAttendance.filter((a) => a.status === 'Overtime').length || 2;
-  const missingCheckoutsCount = filteredAttendance.filter((a) => a.status === 'Missing Check-out').length || 1;
-  const faceRecogCount = faceHistory.length || 15;
+  const filteredAttendance = attendance.filter((a) => {
+    const matchDept = departmentFilter === 'All' || a.department === departmentFilter;
+    return matchDept;
+  });
+  const presentCount = filteredAttendance.filter((a) => a.status === 'Present').length;
+  const lateCount = filteredAttendance.filter((a) => a.status === 'Late').length;
+  const absentCount = filteredAttendance.filter((a) => a.status === 'Absent').length;
+  const overtimeCount = filteredAttendance.filter((a) => a.status === 'Overtime').length;
+  const missingCheckoutsCount = filteredAttendance.filter((a) => a.status === 'Missing Check-out').length;
+  const faceRecogCount = faceHistory.length;
 
   // Time off metrics
-  const filteredTimeOff = timeOff.filter(
-    (t) => departmentFilter === 'All' || t.department === departmentFilter
-  );
+  const filteredTimeOff = timeOff.filter((t) => {
+    const matchDept = departmentFilter === 'All' || t.department === departmentFilter;
+    return matchDept;
+  });
   const approvedLeaves = filteredTimeOff.filter((t) => t.status === 'Approved');
   const pendingLeaves = filteredTimeOff.filter((t) => t.status === 'Pending').length;
   const refusedLeaves = filteredTimeOff.filter((t) => t.status === 'Refused').length;
-  const totalApprovedDays = approvedLeaves.reduce((acc, t) => acc + (Number(t.duration) || 0), 0) || 14;
+  const totalApprovedDays = approvedLeaves.reduce((acc, t) => acc + (Number(t.duration) || 0), 0);
 
-  // Department report rows
-  const departments = ['Engineering', 'Human Resources', 'Finance', 'Sales', 'Design'];
-  const departmentRows = departments.map((dept) => {
+  // Department report rows calculated dynamically from actual data
+  const departmentRows = availableDepartments.map((dept) => {
     const deptEmps = employees.filter((e) => e.department === dept);
-    const count = deptEmps.length || 2;
+    const count = deptEmps.length;
     const deptSlips = payslips.filter((s) => s.department === dept);
-    const gross = deptSlips.reduce((acc, s) => acc + (Number(s.gross) || 0), 0) || count * 65000;
-    const deductions = deptSlips.reduce((acc, s) => acc + (Number(s.deductions) || 0), 0) || count * 7800;
+    const gross = deptSlips.reduce((acc, s) => acc + (Number(s.gross) || 0), 0);
+    const deductions = deptSlips.reduce((acc, s) => acc + (Number(s.deductions) || 0), 0);
     const net = gross - deductions;
+
+    const deptAttendance = attendance.filter((a) => a.department === dept);
+    const presentInDept = deptAttendance.filter((a) => a.status === 'Present' || a.status === 'Late').length;
+    const attendancePct = deptAttendance.length > 0
+      ? Math.round((presentInDept / deptAttendance.length) * 100)
+      : (count > 0 ? 100 : 0);
+
     const approvedLeaveDays = timeOff
       .filter((t) => t.department === dept && t.status === 'Approved')
-      .reduce((acc, t) => acc + (Number(t.duration) || 0), 0) || 3;
+      .reduce((acc, t) => acc + (Number(t.duration) || 0), 0);
 
     return {
       department: dept,
@@ -84,7 +128,7 @@ export const Reports = () => {
       gross,
       deductions,
       net,
-      attendancePct: 96 + (dept === 'Engineering' ? 2 : 0),
+      attendancePct,
       approvedLeave: `${approvedLeaveDays} Days`
     };
   });
@@ -112,9 +156,10 @@ export const Reports = () => {
               onChange={(e) => setPeriodFilter(e.target.value)}
               className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none"
             >
-              <option value="September 2026">September 2026</option>
-              <option value="August 2026">August 2026</option>
-              <option value="Q3 2026">Q3 2026 (Aggregate)</option>
+              <option value="All">All Periods</option>
+              {availablePeriods.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
           </div>
 
@@ -128,10 +173,9 @@ export const Reports = () => {
               className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none"
             >
               <option value="All">All Departments</option>
-              <option value="Engineering">Engineering</option>
-              <option value="Human Resources">Human Resources</option>
-              <option value="Finance">Finance</option>
-              <option value="Sales">Sales</option>
+              {availableDepartments.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
             </select>
           </div>
 
@@ -162,7 +206,7 @@ export const Reports = () => {
               <h3 className="text-sm font-bold text-slate-900">Payroll Summary</h3>
             </div>
             <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-              {filteredPayslips.length || 24} Payslips
+              {filteredPayslips.length} Payslips
             </span>
           </div>
 
@@ -194,7 +238,7 @@ export const Reports = () => {
               <h3 className="text-sm font-bold text-slate-900">Attendance Report</h3>
             </div>
             <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-              {filteredAttendance.length || 50} Shifts
+              {filteredAttendance.length} Shifts
             </span>
           </div>
 
@@ -241,19 +285,19 @@ export const Reports = () => {
           <div className="divide-y divide-slate-100 text-xs">
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-600">Total Leave Requests:</span>
-              <span className="font-bold text-slate-900">{filteredTimeOff.length || 7}</span>
+              <span className="font-bold text-slate-900">{filteredTimeOff.length}</span>
             </div>
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-600">Approved:</span>
-              <span className="font-bold text-emerald-700">{approvedLeaves.length || 4}</span>
+              <span className="font-bold text-emerald-700">{approvedLeaves.length}</span>
             </div>
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-600">Pending:</span>
-              <span className="font-bold text-amber-700">{pendingLeaves || 2}</span>
+              <span className="font-bold text-amber-700">{pendingLeaves}</span>
             </div>
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-600">Refused:</span>
-              <span className="font-bold text-rose-700">{refusedLeaves || 1}</span>
+              <span className="font-bold text-rose-700">{refusedLeaves}</span>
             </div>
           </div>
         </div>
@@ -283,31 +327,39 @@ export const Reports = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {departmentRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-900">{row.department}</td>
-                  <td className="py-3 px-4 text-center font-semibold text-slate-700">
-                    <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100">
-                      {row.employees}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono text-slate-800">
-                    {formatCurrency(row.gross)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono text-rose-600">
-                    {formatCurrency(row.deductions)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">
-                    {formatCurrency(row.net)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold text-slate-900">
-                    {row.attendancePct}%
-                  </td>
-                  <td className="py-3 px-4 text-right font-medium text-slate-700">
-                    {row.approvedLeave}
+              {departmentRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                    No department metrics found for the selected filter.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                departmentRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3 px-4 font-bold text-slate-900">{row.department}</td>
+                    <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                      <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100">
+                        {row.employees}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-slate-800">
+                      {formatCurrency(row.gross)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-rose-600">
+                      {formatCurrency(row.deductions)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">
+                      {formatCurrency(row.net)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-semibold text-slate-900">
+                      {row.attendancePct}%
+                    </td>
+                    <td className="py-3 px-4 text-right font-medium text-slate-700">
+                      {row.approvedLeave}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

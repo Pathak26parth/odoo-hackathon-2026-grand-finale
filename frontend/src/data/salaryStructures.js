@@ -28,7 +28,7 @@ export const saveSalaryStructuresToStorage = (list) => {
 export const fetchSalaryStructuresAsync = async () => {
   try {
     const structures = await payrollService.getSalaryStructures();
-    if (structures && structures.length > 0) {
+    if (Array.isArray(structures)) {
       saveSalaryStructuresToStorage(structures);
       return structures;
     }

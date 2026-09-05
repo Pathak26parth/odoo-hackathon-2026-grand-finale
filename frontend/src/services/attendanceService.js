@@ -48,7 +48,7 @@ export const attendanceService = {
     if (params.status) query.append('status', params.status);
 
     const res = await api.get(`/attendance?${query.toString()}`);
-    const rawList = res.data?.records || res.data || [];
+    const rawList = res.data?.attendance || res.data?.records || (Array.isArray(res.data) ? res.data : []);
     return rawList.map(normalizeAttendance);
   },
 

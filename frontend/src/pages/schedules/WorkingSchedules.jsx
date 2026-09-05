@@ -16,7 +16,7 @@ export const WorkingSchedules = () => {
   const loadData = () => {
     setSchedules(getSchedules());
     fetchSchedulesAsync().then((list) => {
-      if (list && list.length > 0) setSchedules(list);
+      if (Array.isArray(list)) setSchedules(list);
     }).catch(console.error);
   };
 

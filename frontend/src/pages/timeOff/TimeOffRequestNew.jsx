@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { createTimeOffRequest } from '../../data/timeOffRequests';
-import { getTimeOffTypes } from '../../data/timeOffTypes';
-import { getEmployees } from '../../data/employees';
+import { getTimeOffTypes, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { TimeOffRequestForm } from '../../components/timeOff/TimeOffRequestForm';
@@ -19,6 +19,14 @@ export const TimeOffRequestNew = () => {
   useEffect(() => {
     setEmployees(getEmployees());
     setTypes(getTimeOffTypes().filter((t) => t.status === 'Active'));
+
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+
+    fetchTimeOffTypesAsync().then((list) => {
+      if (Array.isArray(list)) setTypes(list.filter((t) => t.status === 'Active'));
+    }).catch(console.error);
   }, []);
 
   const handleSubmit = (data) => {

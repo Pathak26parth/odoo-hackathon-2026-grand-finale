@@ -149,7 +149,7 @@ export const payrollService = {
   // Payruns
   async getPayruns() {
     const res = await api.get('/payruns');
-    const raw = res.data || [];
+    const raw = res.data?.payruns || (Array.isArray(res.data) ? res.data : []);
     return raw.map(normalizePayrun);
   },
 
@@ -197,7 +197,7 @@ export const payrollService = {
   async getPayslips(params = {}) {
     const query = new URLSearchParams(params).toString();
     const res = await api.get(`/payslips?${query}`);
-    const raw = res.data?.payslips || res.data || [];
+    const raw = res.data?.payslips || (Array.isArray(res.data) ? res.data : []);
     return raw.map(normalizePayslip);
   },
 

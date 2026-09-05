@@ -14,6 +14,7 @@ import {
   updateAttendance,
   calculateWorkedHours
 } from '../../data/attendance';
+import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { ShieldCheck, Sparkles, Clock, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
 
@@ -36,16 +37,26 @@ export const FaceCheckIn = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
 
+  const [employees, setEmployees] = useState(getEmployees());
+
+  useEffect(() => {
+    fetchEmployeesAsync().then((list) => {
+      if (Array.isArray(list)) setEmployees(list);
+    }).catch(console.error);
+  }, []);
+
   // Determine current active employee to check in
-  // Default to Amelia Johnson (EMP-001) or current user if employee
-  const targetEmployeeId = currentUser?.employeeId === 'emp-2' ? 'EMP-002' : 'EMP-001';
+  const targetEmployee = employees.find(
+    (e) => e.employeeId === currentUser?.employeeId || String(e.id) === String(currentUser?.employeeId)
+  ) || employees[0];
+  const targetEmployeeId = targetEmployee?.employeeId || targetEmployee?.id || '';
 
   // Check today's attendance record
   const todayStr = currentTime.toISOString().split('T')[0];
   const allRecords = getAttendanceRecords();
   const todayRecord = allRecords.find(
     (r) =>
-      (r.employeeId === 'emp-1' || r.employeeId === targetEmployeeId) &&
+      (r.employeeId === targetEmployeeId || (targetEmployee?.id && String(r.employeeId) === String(targetEmployee.id))) &&
       r.date === todayStr
   );
   const hasCheckedInToday = Boolean(todayRecord && todayRecord.checkIn && !todayRecord.checkOut);
@@ -100,7 +111,7 @@ export const FaceCheckIn = () => {
     try {
       // Create record in main attendance store
       await createAttendance({
-        employeeId: verifiedData.internalId || 'emp-1',
+        employeeId: verifiedData.internalId || verifiedData.employeeId || targetEmployee?.id || '',
         employeeName: verifiedData.employeeName,
         department: verifiedData.department,
         date: todayStr,

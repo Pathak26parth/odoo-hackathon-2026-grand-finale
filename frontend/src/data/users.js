@@ -2,24 +2,17 @@ import userService, { normalizeUser } from '../services/userService';
 
 const STORAGE_KEY = 'peoplepay360_users_data';
 
-export const INITIAL_USERS = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'admin@peoplepay360.com',
-    role: 'Admin',
-    status: 'Active',
-    employeeId: 'EMP001',
-    employeeName: 'Admin User',
-    createdAt: '2026-01-10'
-  }
-];
+export const INITIAL_USERS = [];
 
 export const getUsers = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Clean out legacy mock data
+        return parsed.filter((u) => u && u.employeeId !== 'EMP001' && u.name !== 'Admin User');
+      }
     }
   } catch (err) {
     console.error('Error reading users from localStorage:', err);
@@ -30,7 +23,7 @@ export const getUsers = () => {
 export const fetchUsersAsync = async () => {
   try {
     const data = await userService.getAllUsers();
-    if (data && data.length > 0) {
+    if (Array.isArray(data)) {
       saveUsersToStorage(data);
       return data;
     }
