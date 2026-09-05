@@ -174,7 +174,7 @@ export const Employees = () => {
       header: 'System Access',
       key: 'userRole',
       render: (row) => {
-        const r = (row.role || row.userRole || row.user_role || 'EMPLOYEE').toUpperCase();
+        const r = (row.role || row.userRole || row.user_role || 'EMPLOYEE').toUpperCase().replace(/\s+/g, '_');
         switch (r) {
           case 'ADMIN':
             return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
@@ -284,16 +284,28 @@ export const Employees = () => {
             </button>
           </div>
 
-          {/* Add Employee CTA */}
+          {/* Add CTAs */}
           {isHRorAdmin && (
-            <button
-              type="button"
-              onClick={handleAddEmployeeClick}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Employee
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/employees/new?role=HR_MANAGER')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                title="Create an HR Manager with full HR Operations Panel access"
+              >
+                <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                Add HR Manager
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAddEmployeeClick}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Employee
+              </button>
+            </div>
           )}
         </div>
       </PageHeader>
@@ -394,7 +406,7 @@ export const Employees = () => {
                     <span className="text-slate-600 font-medium truncate">{position}</span>
                     <span className="text-slate-300">•</span>
                     {(() => {
-                      const r = (emp.role || emp.userRole || emp.user_role || 'EMPLOYEE').toUpperCase();
+                      const r = (emp.role || emp.userRole || emp.user_role || 'EMPLOYEE').toUpperCase().replace(/\s+/g, '_');
                       switch (r) {
                         case 'ADMIN':
                           return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;

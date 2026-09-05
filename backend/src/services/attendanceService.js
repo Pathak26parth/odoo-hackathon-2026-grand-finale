@@ -200,14 +200,61 @@ class AttendanceService {
     }
 
     const prev = existingRows[0];
-    const checkIn = new Date(correctedCheckIn);
-    const checkOut = correctedCheckOut ? new Date(correctedCheckOut) : null;
+    const pad = (n) => String(n).padStart(2, '0');
+
+    // Determine base date YYYY-MM-DD from record or today
+    let baseDateStr = new Date().toISOString().split('T')[0];
+    if (prev.date) {
+      if (prev.date instanceof Date && !isNaN(prev.date.getTime())) {
+        baseDateStr = `${prev.date.getFullYear()}-${pad(prev.date.getMonth() + 1)}-${pad(prev.date.getDate())}`;
+      } else {
+        const m = String(prev.date).match(/^\d{4}-\d{2}-\d{2}/);
+        if (m) baseDateStr = m[0];
+      }
+    }
+
+    const parseDateTime = (val) => {
+      if (!val) return null;
+      if (val instanceof Date && !isNaN(val.getTime())) return val;
+      const str = String(val).trim();
+      if (!str) return null;
+
+      // HH:mm or HH:mm:ss
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+        const timeWithSec = str.length === 5 ? `${str}:00` : str;
+        const normalizedTime = timeWithSec.length === 7 ? `0${timeWithSec}` : timeWithSec;
+        return new Date(`${baseDateStr}T${normalizedTime}`);
+      }
+
+      // "YYYY-MM-DD HH:mm:ss"
+      if (/^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+        return new Date(str.replace(/\s+/, 'T'));
+      }
+
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) return d;
+      return null;
+    };
+
+    const toSqlDateTime = (d) => {
+      if (!d || isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const checkInDate = parseDateTime(correctedCheckIn);
+    if (!checkInDate) {
+      const err = new Error('Invalid check-in timestamp format provided.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const checkOutDate = correctedCheckOut ? parseDateTime(correctedCheckOut) : null;
 
     let workedHours = 0;
     let overtimeHours = 0;
 
-    if (checkOut) {
-      const diffMs = checkOut.getTime() - checkIn.getTime();
+    if (checkOutDate) {
+      const diffMs = checkOutDate.getTime() - checkInDate.getTime();
       const rawHours = diffMs / (1000 * 60 * 60);
       const breakHours = rawHours > 5 ? 1.0 : 0.0;
       workedHours = Math.max(0, parseFloat((rawHours - breakHours).toFixed(2)));
@@ -215,13 +262,16 @@ class AttendanceService {
       overtimeHours = workedHours > expected ? parseFloat((workedHours - expected).toFixed(2)) : 0.00;
     }
 
+    const sqlCheckIn = toSqlDateTime(checkInDate);
+    const sqlCheckOut = toSqlDateTime(checkOutDate);
+
     // Update attendance
     await query(
       `UPDATE attendance 
        SET check_in = ?, check_out = ?, worked_hours = ?, overtime_hours = ?, 
            is_manual_correction = TRUE, corrected_by = ?, correction_reason = ?, updated_at = NOW()
        WHERE id = ?`,
-      [checkIn, checkOut, workedHours, overtimeHours, correctedByUserId, reason, attendanceId]
+      [sqlCheckIn, sqlCheckOut, workedHours, overtimeHours, correctedByUserId, reason, attendanceId]
     );
 
     // Record Audit Log
@@ -236,15 +286,15 @@ class AttendanceService {
         userAgent,
         JSON.stringify({
           before: { check_in: prev.check_in, check_out: prev.check_out, worked_hours: prev.worked_hours },
-          after: { check_in: checkIn, check_out: checkOut, worked_hours: workedHours, reason }
+          after: { check_in: sqlCheckIn, check_out: sqlCheckOut, worked_hours: workedHours, reason }
         })
       ]
     );
 
     return {
       attendanceId,
-      checkIn,
-      checkOut,
+      checkIn: sqlCheckIn,
+      checkOut: sqlCheckOut,
       workedHours,
       isManualCorrection: true,
       reason

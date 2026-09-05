@@ -236,8 +236,48 @@ class EmployeeController {
           console.error('[Employee Create] Cloudinary upload warning:', uploadErr.message);
         }
       }
+      // Department resolution
+      let targetDeptId = null;
+      if (departmentId !== undefined && departmentId !== null && !isNaN(Number(departmentId))) {
+        targetDeptId = Number(departmentId);
+      } else if (req.body.department_id !== undefined && req.body.department_id !== null && !isNaN(Number(req.body.department_id))) {
+        targetDeptId = Number(req.body.department_id);
+      } else if (req.body.department) {
+        const deptStr = String(req.body.department).trim().toLowerCase();
+        const depts = await query('SELECT id, name, code FROM departments');
+        const matched = depts.find(d =>
+          d.name.toLowerCase() === deptStr ||
+          deptStr.includes(d.name.toLowerCase()) ||
+          d.name.toLowerCase().includes(deptStr) ||
+          d.code.toLowerCase() === deptStr
+        );
+        targetDeptId = matched ? matched.id : 1;
+      } else {
+        targetDeptId = 1;
+      }
+
       // Resolve effective role for user account creation
-      let chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      let chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : null));
+      
+      // Auto-detect HR role if not explicitly specified as another role
+      if (!chosenRole || chosenRole === 'EMPLOYEE') {
+        const titleLower = String(jobPosition || req.body.position || '').toLowerCase();
+        const deptName = String(req.body.department || '').toLowerCase();
+        if (
+          titleLower.includes('hr manager') ||
+          titleLower.includes('human resources manager') ||
+          titleLower.includes('head of hr') ||
+          titleLower.includes('hr operations') ||
+          titleLower.includes('hr lead') ||
+          titleLower.includes('hr specialist') ||
+          (targetDeptId === 2 && (titleLower.includes('manager') || titleLower.includes('head') || titleLower.includes('lead')))
+        ) {
+          chosenRole = 'HR_MANAGER';
+        } else {
+          chosenRole = chosenRole || 'EMPLOYEE';
+        }
+      }
+
       // Privilege Escalation Guard: Non-admin attempt to assign ADMIN role safely defaulted to EMPLOYEE
       if (req.user?.role !== 'ADMIN' && (String(chosenRole).toUpperCase() === 'ADMIN' || String(chosenRole) === '1')) {
         chosenRole = 'EMPLOYEE';
@@ -251,8 +291,8 @@ class EmployeeController {
           lastName,
           email,
           phone,
-          jobPosition,
-          departmentId,
+          jobPosition: jobPosition || req.body.position || 'Employee',
+          departmentId: targetDeptId,
           managerId,
           workingScheduleId,
           gender,

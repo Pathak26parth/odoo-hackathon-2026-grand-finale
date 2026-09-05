@@ -31,7 +31,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
     canManageUsers,
     canViewPayrollConfig,
     isHRorAdmin,
-    canRegisterFace
+    canRegisterFace,
+    isHRManager
   } = useAuth();
 
   const location = useLocation();
@@ -95,9 +96,15 @@ export const Sidebar = ({ isOpen, onClose }) => {
               <span className="text-sm font-bold tracking-tight text-slate-900 block leading-tight">
                 People<span className="text-blue-600">Pay</span>360
               </span>
-              <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 block -mt-0.5">
-                HR &amp; Payroll
-              </span>
+              {isHRManager ? (
+                <span className="inline-flex items-center gap-1 text-[9px] uppercase font-bold tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-0.5">
+                  <Shield className="w-2.5 h-2.5 text-emerald-600" /> HR Operations Hub
+                </span>
+              ) : (
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 block -mt-0.5">
+                  HR &amp; Payroll
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -112,11 +119,16 @@ export const Sidebar = ({ isOpen, onClose }) => {
         <div className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
           {/* Dashboard & Core Section */}
           <div>
-            <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Overview
+            <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Overview</span>
+              {isHRManager && (
+                <span className="text-[9px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">
+                  HR Panel
+                </span>
+              )}
             </p>
             <nav className="space-y-0.5">
-              {/* Dashboard Link (HR Payroll Manager & Admin only) */}
+              {/* Dashboard Link (HR Manager, HR Payroll Manager & Admin) */}
               {canAccessDashboard && renderSingleLink('Dashboard', '/dashboard', LayoutDashboard)}
 
               {/* Employees (All can view; Employee views self) */}
@@ -142,8 +154,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
               Time &amp; Attendance
             </p>
             <nav className="space-y-0.5">
-              {/* Nested Attendance Accordion (Hidden for Admin Panel) */}
-              {!isEmployeeOnly && role !== 'Admin' && (
+              {/* Nested Attendance Accordion (For all non-employee roles: Admin, HR Manager, HR Payroll) */}
+              {!isEmployeeOnly && (
                 <div>
                   <button
                     type="button"
@@ -450,7 +462,15 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 <p className="text-xs font-semibold text-slate-900 truncate leading-tight">
                   {currentUser?.name || 'User'}
                 </p>
-                <span className="inline-block text-[10px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100 truncate">
+                <span className={`inline-block text-[10px] font-medium px-1.5 py-0.2 rounded border truncate ${
+                  currentUser?.role === 'HR Manager'
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200 font-bold'
+                    : currentUser?.role === 'Admin'
+                    ? 'text-purple-700 bg-purple-50 border-purple-200 font-bold'
+                    : currentUser?.role === 'HR Payroll Manager' || currentUser?.role === 'HR Payroll User'
+                    ? 'text-blue-700 bg-blue-50 border-blue-200 font-bold'
+                    : 'text-slate-600 bg-slate-100 border-slate-200'
+                }`}>
                   {currentUser?.role || 'Admin'}
                 </span>
               </div>

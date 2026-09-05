@@ -109,6 +109,16 @@ export const updateEmployee = async (id, data) => {
           if (updatedEmp.email) {
             u.email = updatedEmp.email;
           }
+          if (updatedEmp.roleDisplayName || updatedEmp.role) {
+            u.role = updatedEmp.roleDisplayName || (updatedEmp.role === 'HR_MANAGER' ? 'HR Manager' : updatedEmp.role);
+            u.roleRaw = updatedEmp.userRole || updatedEmp.role;
+          }
+          if (updatedEmp.jobPosition || updatedEmp.position) {
+            u.position = updatedEmp.jobPosition || updatedEmp.position;
+          }
+          if (updatedEmp.department || updatedEmp.departmentName) {
+            u.department = updatedEmp.department || updatedEmp.departmentName;
+          }
           localStorage.setItem('peoplepay360_current_user', JSON.stringify(u));
         }
       }

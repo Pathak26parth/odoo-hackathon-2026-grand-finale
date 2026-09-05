@@ -174,9 +174,10 @@ export const AuthProvider = ({ children }) => {
   const canManagePayrollConfig =
     role === 'Admin' || role === 'HR Payroll Manager' || can('salary_rules.manage');
   const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || can('dashboard.read');
-  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager' || can('dashboard.read');
+  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || can('reports.read') || can('dashboard.read');
   const canManageUsers = role === 'Admin' || can('users.manage') || can('users.create');
   const canRegisterFace = isHRorAdmin;
+  const isHRManager = role === 'HR Manager' || currentUser?.roleRaw === 'HR_MANAGER';
 
   return (
     <AuthContext.Provider
@@ -200,7 +201,8 @@ export const AuthProvider = ({ children }) => {
         canAccessDashboard,
         canAccessReports,
         canManageUsers,
-        canRegisterFace
+        canRegisterFace,
+        isHRManager
       }}
     >
       {children}

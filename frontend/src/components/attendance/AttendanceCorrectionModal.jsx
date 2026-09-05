@@ -24,14 +24,16 @@ export const AttendanceCorrectionModal = ({
       const extractTime = (val, defaultVal) => {
         if (!val) return defaultVal;
         const str = String(val).trim();
-        // If format like "09:30" or "09:30:00"
-        if (/^\d{1,2}:\d{2}/.test(str)) {
-          return str.slice(0, 5);
+        if (!str) return defaultVal;
+        if (str.includes(' ') || str.includes('T')) {
+          const parts = str.split(/[ T]/);
+          if (parts[1]) {
+            const m = parts[1].replace('Z', '').match(/^(\d{1,2}):(\d{2})/);
+            if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+          }
         }
-        const d = new Date(val);
-        if (!isNaN(d.getTime())) {
-          return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        }
+        const m = str.match(/^(\d{1,2}):(\d{2})/);
+        if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
         return defaultVal;
       };
 

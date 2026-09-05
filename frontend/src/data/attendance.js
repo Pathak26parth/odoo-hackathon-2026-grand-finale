@@ -63,6 +63,16 @@ export const getAttendanceById = (id) => {
   return list.find((a) => String(a.id) === String(id)) || null;
 };
 
+export const getAttendanceByIdAsync = async (id) => {
+  try {
+    const res = await attendanceService.getAttendanceById(id);
+    if (res) return res;
+  } catch (err) {
+    console.warn('[Data Bridge] Could not fetch attendance record from backend:', err.message);
+  }
+  return getAttendanceById(id);
+};
+
 export const createAttendance = async (data) => {
   try {
     const empId = data.internalEmployeeId || data.employeeId;
@@ -80,7 +90,27 @@ export const createAttendance = async (data) => {
 
 export const updateAttendance = async (id, data) => {
   try {
-    const res = await attendanceService.correctAttendance(id, data.checkIn, data.checkOut, data.reason || data.notes || 'Correction');
+    const baseDate = data.date || new Date().toISOString().split('T')[0];
+    const formatPayloadTime = (t) => {
+      if (!t) return null;
+      const str = String(t).trim();
+      if (!str) return null;
+      if (str.includes(' ') || str.includes('T')) return str;
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+        return `${baseDate} ${str.length === 5 ? str + ':00' : str}`;
+      }
+      return str;
+    };
+
+    const formattedCheckIn = formatPayloadTime(data.checkIn);
+    const formattedCheckOut = formatPayloadTime(data.checkOut);
+
+    const res = await attendanceService.correctAttendance(
+      id,
+      formattedCheckIn,
+      formattedCheckOut,
+      data.reason || data.notes || 'Correction'
+    );
     await fetchAttendanceAsync();
     return res;
   } catch (err) {

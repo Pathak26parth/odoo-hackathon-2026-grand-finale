@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Trash2 } from 'lucide-react';
-import { getAttendanceById, createAttendance, updateAttendance, deleteAttendance } from '../../data/attendance';
+import { ArrowLeft, Check, Trash2, Loader2 } from 'lucide-react';
+import { getAttendanceById, getAttendanceByIdAsync, createAttendance, updateAttendance, deleteAttendance } from '../../data/attendance';
 import { getEmployees } from '../../data/employees';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -16,31 +16,43 @@ export const AttendanceDetail = () => {
 
   const [employees, setEmployees] = useState([]);
   const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(!isCreate);
   const [toastMessage, setToastMessage] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
-    const emps = getEmployees();
-    setEmployees(emps);
+    let mounted = true;
+    const init = async () => {
+      const emps = getEmployees();
+      if (mounted) setEmployees(emps);
 
-    if (!isCreate) {
-      const existing = getAttendanceById(id);
-      if (existing) {
-        setRecord(existing);
-      } else {
-        alert('Attendance record not found');
-        navigate('/attendance');
+      if (!isCreate) {
+        setLoading(true);
+        const existing = await getAttendanceByIdAsync(id);
+        if (!mounted) return;
+        if (existing) {
+          setRecord(existing);
+        } else {
+          alert('Attendance record not found');
+          navigate('/attendance');
+        }
+        setLoading(false);
       }
-    }
+    };
+
+    init();
+    return () => {
+      mounted = false;
+    };
   }, [id, isCreate, navigate]);
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
       if (isCreate) {
-        createAttendance(data);
+        await createAttendance(data);
         setToastMessage('Attendance logged successfully!');
       } else {
-        updateAttendance(id, data);
+        await updateAttendance(id, data);
         setToastMessage('Attendance updated successfully!');
       }
 
@@ -48,12 +60,12 @@ export const AttendanceDetail = () => {
         navigate('/attendance');
       }, 900);
     } catch (err) {
-      alert('Error saving attendance: ' + err.message);
+      alert('Error saving attendance: ' + (err.response?.data?.message || err.message));
     }
   };
 
-  const handleDelete = () => {
-    deleteAttendance(id);
+  const handleDelete = async () => {
+    await deleteAttendance(id);
     setToastMessage('Attendance record deleted.');
     setTimeout(() => {
       navigate('/attendance');
@@ -101,16 +113,23 @@ export const AttendanceDetail = () => {
         </div>
       </PageHeader>
 
-      {/* Form */}
-      {(isCreate || record) && (
-        <AttendanceForm
-          initialData={record || {}}
-          employees={employees}
-          onSubmit={handleSubmit}
-          onCancel={() => navigate('/attendance')}
-          isCreate={isCreate}
-          canManualCorrect={isHRorAdmin}
-        />
+      {/* Loading State or Form */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+          <p className="text-xs text-slate-500 font-medium">Loading attendance details...</p>
+        </div>
+      ) : (
+        (isCreate || record) && (
+          <AttendanceForm
+            initialData={record || {}}
+            employees={employees}
+            onSubmit={handleSubmit}
+            onCancel={() => navigate('/attendance')}
+            isCreate={isCreate}
+            canManualCorrect={isHRorAdmin}
+          />
+        )
       )}
 
       {/* Delete Confirmation Modal */}

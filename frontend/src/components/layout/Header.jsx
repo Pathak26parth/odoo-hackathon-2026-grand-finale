@@ -71,7 +71,13 @@ export const Header = ({ onToggleSidebar, breadcrumbs = [] }) => {
               <p className="text-xs font-bold text-slate-900 leading-tight">
                 {currentUser?.name || 'Admin User'}
               </p>
-              <span className="text-[10px] text-slate-500 font-medium">
+              <span className={`text-[10px] font-medium ${
+                currentUser?.role === 'HR Manager'
+                  ? 'text-emerald-700 font-bold'
+                  : currentUser?.role === 'Admin'
+                  ? 'text-purple-700 font-bold'
+                  : 'text-slate-500'
+              }`}>
                 {currentUser?.role || 'Admin'}
               </span>
             </div>
@@ -84,7 +90,13 @@ export const Header = ({ onToggleSidebar, breadcrumbs = [] }) => {
               <div className="px-3.5 py-2 border-b border-slate-100">
                 <p className="font-bold text-slate-900">{currentUser?.name || 'Admin User'}</p>
                 <p className="text-[11px] text-slate-400 truncate">{currentUser?.email || 'admin@peoplepay360.com'}</p>
-                <span className="mt-1.5 inline-block text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                <span className={`mt-1.5 inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  currentUser?.role === 'HR Manager'
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : currentUser?.role === 'Admin'
+                    ? 'text-purple-700 bg-purple-50 border-purple-200'
+                    : 'text-blue-700 bg-blue-50 border-blue-100'
+                }`}>
                   {currentUser?.role || 'Admin'}
                 </span>
               </div>

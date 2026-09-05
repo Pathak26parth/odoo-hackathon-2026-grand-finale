@@ -11,16 +11,32 @@ export const AttendanceForm = ({
   isCreate = false,
   canManualCorrect = true
 }) => {
+  const cleanTime = (val, fallback = '') => {
+    if (!val) return fallback;
+    const str = String(val).trim();
+    if (!str) return fallback;
+    if (str.includes(' ') || str.includes('T')) {
+      const parts = str.split(/[ T]/);
+      if (parts[1]) {
+        const m = parts[1].replace('Z', '').match(/^(\d{1,2}):(\d{2})/);
+        if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+      }
+    }
+    const m = str.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+    return fallback;
+  };
+
   const [formData, setFormData] = useState({
     employeeId: initialData.employeeId || employees[0]?.id || '',
     employeeName: initialData.employeeName || employees[0]?.name || '',
     department: initialData.department || employees[0]?.department || '',
-    date: initialData.date || new Date().toISOString().split('T')[0],
-    checkIn: initialData.checkIn || '09:00',
-    checkOut: initialData.checkOut || '17:30',
+    date: initialData.date ? String(initialData.date).split('T')[0] : new Date().toISOString().split('T')[0],
+    checkIn: cleanTime(initialData.checkIn || initialData.check_in, '09:00'),
+    checkOut: cleanTime(initialData.checkOut || initialData.check_out, ''),
     status: initialData.status || 'Present',
-    isManualEdit: initialData.isManualEdit || false,
-    notes: initialData.notes || ''
+    isManualEdit: initialData.isManualEdit || initialData.is_manual_correction || false,
+    notes: initialData.notes || initialData.correction_reason || ''
   });
 
   const [workedHours, setWorkedHours] = useState('0h 00m');

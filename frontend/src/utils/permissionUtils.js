@@ -47,7 +47,7 @@ export const canView = (role, module) => {
 
   switch (module) {
     case MODULES.DASHBOARD:
-      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER';
 
     case MODULES.EMPLOYEES:
       // Employee only views own profile; HR roles & admin view all
@@ -85,7 +85,7 @@ export const canView = (role, module) => {
       return true;
 
     case MODULES.REPORTS:
-      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER';
+      return r === 'ADMIN' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER';
 
     case MODULES.USERS:
     case MODULES.ROLES:

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Navigate } from 'react-router-dom';
-import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2, Shield } from 'lucide-react';
+import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2, Shield, Sparkles, CheckCircle2 } from 'lucide-react';
 import { getEmployeeById, createEmployee, updateEmployee, deleteEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
 import { employeeService } from '../../services/employeeService';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -23,7 +23,7 @@ const SYSTEM_ROLES = [
     label: 'HR Manager (Personnel & HR Operations Panel)',
     panel: 'HR Operations Panel',
     badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    desc: 'Full HR Operations: Employee master, attendance oversight, time off approvals, and contracts.'
+    desc: 'Full HR Operations: Employee master directory, attendance oversight, time off approvals, and contracts.'
   },
   {
     value: 'HR_PAYROLL_ADMIN',
@@ -51,6 +51,10 @@ const SYSTEM_ROLES = [
 export const EmployeeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialRoleParam = searchParams.get('role');
+  const isHrParam = initialRoleParam === 'HR_MANAGER' || initialRoleParam === 'hr_manager' || initialRoleParam === 'hr';
+
   const { currentUser, isEmployeeOnly, isHRorAdmin, role } = useAuth();
   const isCreate = !id || id === 'new';
   const isAdmin = role === 'Admin' || currentUser?.role === 'ADMIN' || currentUser?.role === 'Admin';
@@ -87,11 +91,11 @@ export const EmployeeDetail = () => {
     email: '',
     phone: '',
     avatar: DEFAULT_PHOTO,
-    role: 'EMPLOYEE',
-    department: 'Engineering & Technology',
+    role: isHrParam ? 'HR_MANAGER' : 'EMPLOYEE',
+    department: isHrParam ? 'Human Resources' : 'Engineering & Technology',
     manager: 'None',
-    position: '',
-    schedule: 'Standard 40 Hours',
+    position: isHrParam ? 'Head of Human Resources' : '',
+    schedule: 'Standard Full-Time (40h/week)',
     status: 'Active'
   });
 
@@ -544,7 +548,18 @@ export const EmployeeDetail = () => {
               <select
                 disabled={!isEditing}
                 value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData((prev) => {
+                    const isHr = val === 'Human Resources';
+                    return {
+                      ...prev,
+                      department: val,
+                      role: isHr && prev.role === 'EMPLOYEE' ? 'HR_MANAGER' : prev.role,
+                      position: isHr && (!prev.position || prev.position === 'Employee') ? 'HR Operations Specialist' : prev.position
+                    };
+                  });
+                }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600"
               >
                 {departments.map((dept) => (
@@ -563,8 +578,18 @@ export const EmployeeDetail = () => {
                 type="text"
                 disabled={!isEditing}
                 value={formData.position}
-                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                placeholder="e.g. Software Engineer"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData((prev) => {
+                    const isHrTitle = /hr|human resources|people|talent|recruiter/i.test(val);
+                    return {
+                      ...prev,
+                      position: val,
+                      role: isHrTitle && prev.role === 'EMPLOYEE' ? 'HR_MANAGER' : prev.role
+                    };
+                  });
+                }}
+                placeholder="e.g. Head of Human Resources"
                 className={`w-full px-3 py-2 border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600 ${errors.position ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
                   }`}
               />
@@ -620,37 +645,111 @@ export const EmployeeDetail = () => {
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
+          </div>
+        </div>
 
-            <div className="sm:col-span-2 pt-2 border-t border-slate-100">
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-blue-700">
-                  <Shield className="w-4 h-4 text-blue-600" />
-                  System Access & Role Panel <span className="text-rose-500">*</span>
-                </span>
-                <span className="text-[11px] text-blue-600 font-medium">Controls which dashboard panel this person can access</span>
-              </label>
-              <select
-                disabled={!isEditing || isEmployeeOnly}
-                value={formData.role || 'EMPLOYEE'}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="w-full px-3 py-2.5 border border-blue-200 bg-blue-50/30 rounded-lg text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600"
-              >
-                {allowedRoles.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              <div className="mt-1.5 flex items-center gap-2">
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                  allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}>
-                  Panel: {allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.panel || 'Standard Portal'}
-                </span>
-                <p className="text-[11px] text-slate-500">
-                  {allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.desc}
-                </p>
+        {/* Section 3: System Access & Role Assignment */}
+        <div className="bg-white rounded-xl border border-blue-200 shadow-2xs p-6 bg-linear-to-b from-white to-blue-50/20">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-5 border-b border-blue-100">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-blue-600" />
+              <h3 className="text-sm font-bold text-slate-900">System Access &amp; Role Panel (Portal Level)</h3>
+            </div>
+            {isAdmin && isEditing && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, role: 'HR_MANAGER', department: 'Human Resources' })}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                    formData.role === 'HR_MANAGER'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" /> Set HR Manager Panel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, role: 'EMPLOYEE' })}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                    formData.role === 'EMPLOYEE'
+                      ? 'bg-slate-800 text-white border-slate-800 shadow-2xs'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Employee Portal
+                </button>
               </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600">
+              Select which portal panel and functional authority this person accesses upon logging in:
+            </p>
+
+            {/* Interactive Role Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {allowedRoles.map((r) => {
+                const isSelected = (formData.role || 'EMPLOYEE') === r.value;
+                return (
+                  <div
+                    key={r.value}
+                    onClick={() => {
+                      if (isEditing && !isEmployeeOnly) {
+                        setFormData({ ...formData, role: r.value });
+                      }
+                    }}
+                    className={`p-3.5 rounded-xl border-2 transition-all text-left flex flex-col justify-between ${
+                      isSelected
+                        ? r.value === 'HR_MANAGER'
+                          ? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
+                          : r.value === 'ADMIN'
+                          ? 'border-purple-500 bg-purple-50/50 shadow-xs ring-2 ring-purple-500/20'
+                          : 'border-blue-500 bg-blue-50/50 shadow-xs ring-2 ring-blue-500/20'
+                        : isEditing && !isEmployeeOnly
+                        ? 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/60 cursor-pointer'
+                        : 'border-slate-200 bg-slate-50/50 opacity-70 cursor-not-allowed'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                          {r.value === 'HR_MANAGER' ? <Shield className="w-3.5 h-3.5 text-emerald-600" /> : null}
+                          {r.label}
+                        </span>
+                        {isSelected && (
+                          <CheckCircle2 className={`w-4 h-4 shrink-0 ${
+                            r.value === 'HR_MANAGER' ? 'text-emerald-600' : r.value === 'ADMIN' ? 'text-purple-600' : 'text-blue-600'
+                          }`} />
+                        )}
+                      </div>
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border mb-2 ${r.badge}`}>
+                        Panel: {r.panel}
+                      </span>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        {r.desc}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Dynamic Status Display */}
+            <div className={`p-3 rounded-lg border text-xs flex items-center gap-2 ${
+              formData.role === 'HR_MANAGER'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : formData.role === 'ADMIN'
+                ? 'bg-purple-50 border-purple-200 text-purple-800'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}>
+              <Shield className="w-4 h-4 shrink-0" />
+              <span>
+                <strong>Assigned Role:</strong>{' '}
+                {allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.label} — grants access to{' '}
+                <strong>{allowedRoles.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.panel}</strong>.
+              </span>
             </div>
           </div>
         </div>

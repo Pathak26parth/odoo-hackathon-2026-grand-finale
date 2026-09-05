@@ -8,13 +8,35 @@ export function normalizeAttendance(att) {
 
   const formatTime = (timeVal) => {
     if (!timeVal) return null;
-    if (typeof timeVal === 'string' && timeVal.includes('T')) {
-      return new Date(timeVal).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    if (timeVal instanceof Date && !isNaN(timeVal.getTime())) {
+      return `${String(timeVal.getHours()).padStart(2, '0')}:${String(timeVal.getMinutes()).padStart(2, '0')}`;
     }
-    if (typeof timeVal === 'string' && timeVal.includes(':')) {
-      return timeVal.slice(0, 5);
+    const str = String(timeVal).trim();
+    if (!str) return null;
+
+    // Handle datetime strings like "2026-09-05 22:41:02" or "2026-09-05T22:41:02"
+    if (str.includes(' ') || str.includes('T')) {
+      const parts = str.split(/[ T]/);
+      if (parts[1]) {
+        const timePart = parts[1].replace('Z', '');
+        const m = timePart.match(/^(\d{1,2}):(\d{2})/);
+        if (m) {
+          return `${m[1].padStart(2, '0')}:${m[2]}`;
+        }
+      }
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }
     }
-    return timeVal;
+
+    // Handle simple time strings like "09:00" or "09:00:00" or "9:00"
+    const m = str.match(/^(\d{1,2}):(\d{2})/);
+    if (m) {
+      return `${m[1].padStart(2, '0')}:${m[2]}`;
+    }
+
+    return null;
   };
 
   return {

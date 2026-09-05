@@ -230,6 +230,9 @@ class UserController {
         return sendError(res, 'No fields provided to update.', 400);
       }
 
+      updateSql += updates.join(', ') + ', updated_at = NOW() WHERE id = ?';
+      params.push(id);
+
       await query(updateSql, params);
 
       // If password was updated, notify user via email

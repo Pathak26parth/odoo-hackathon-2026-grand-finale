@@ -76,13 +76,29 @@ export const employeeService = {
   },
 
   async createEmployee(payload) {
+    let resolvedDeptId = payload.departmentId ? Number(payload.departmentId) : null;
+    if (!resolvedDeptId && payload.department) {
+      const deptMap = {
+        'engineering': 1,
+        'engineering & technology': 1,
+        'human resources': 2,
+        'hr': 2,
+        'finance': 3,
+        'finance & payroll operations': 3,
+        'marketing': 4,
+        'marketing & growth': 4
+      };
+      resolvedDeptId = deptMap[String(payload.department).trim().toLowerCase()] || 1;
+    }
+
     const body = {
       firstName: payload.firstName || (payload.name ? payload.name.split(' ')[0] : ''),
       lastName: payload.lastName || (payload.name ? payload.name.split(' ').slice(1).join(' ') : ''),
       email: payload.email,
       phone: payload.phone || null,
       jobPosition: payload.position || payload.jobPosition || 'Employee',
-      departmentId: payload.departmentId ? Number(payload.departmentId) : (payload.department ? 1 : null),
+      department: payload.department,
+      departmentId: resolvedDeptId || 1,
       managerId: payload.managerId ? Number(payload.managerId) : null,
       workingScheduleId: payload.workingScheduleId ? Number(payload.workingScheduleId) : 1,
       gender: payload.gender || 'OTHER',
