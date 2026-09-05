@@ -1,17 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2 } from 'lucide-react';
 import { getEmployeeById, createEmployee, updateEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { EmployeeSmartActions } from '../../components/employees/EmployeeSmartActions';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
 
 const DEFAULT_PHOTO = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
 
 export const EmployeeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentUser, isEmployeeOnly, isHRorAdmin } = useAuth();
   const isCreate = !id || id === 'new';
+
+  // If a non-admin / non-HR employee tries to create a new employee, bounce them to their own profile
+  if (isCreate && isEmployeeOnly) {
+    const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
+    return <Navigate to={`/employees/${ownId}`} replace />;
+  }
+
   const fileInputRef = useRef(null);
 
   const [isEditing, setIsEditing] = useState(isCreate);
@@ -158,7 +167,12 @@ export const EmployeeDetail = () => {
       }
 
       setTimeout(() => {
-        navigate('/employees');
+        if (isEmployeeOnly) {
+          setIsEditing(false);
+          setSubmitting(false);
+        } else {
+          navigate('/employees');
+        }
       }, 900);
     } catch (err) {
       alert('Error saving employee: ' + err.message);
@@ -212,14 +226,25 @@ export const EmployeeDetail = () => {
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => navigate('/employees')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Cancel
-          </button>
+          {isEditing && !isCreate ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Cancel
+            </button>
+          ) : !isEmployeeOnly ? (
+            <button
+              type="button"
+              onClick={() => navigate('/employees')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back
+            </button>
+          ) : null}
         </div>
       </PageHeader>
 

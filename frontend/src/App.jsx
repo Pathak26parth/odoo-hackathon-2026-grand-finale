@@ -337,8 +337,12 @@ const ProtectedRoute = ({ children }) => {
 
 // Default index redirection
 const IndexRedirect = () => {
-  const { isAuthenticated, canAccessDashboard } = useAuth();
+  const { isAuthenticated, canAccessDashboard, isEmployeeOnly, currentUser } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (isEmployeeOnly) {
+    const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
+    return <Navigate to={`/employees/${ownId}`} replace />;
+  }
   return <Navigate to={canAccessDashboard ? '/dashboard' : '/employees'} replace />;
 };
 

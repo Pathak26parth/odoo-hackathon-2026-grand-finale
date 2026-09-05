@@ -67,6 +67,11 @@ export const attendanceService = {
     return res.data;
   },
 
+  async verifyFace(faceInput, employeeId) {
+    const res = await api.post('/attendance/face-verify', { faceInput, employeeId });
+    return res.data;
+  },
+
   async faceCheckIn(faceInput, employeeId) {
     const res = await api.post('/attendance/face-check-in', { faceInput, employeeId });
     return res.data;

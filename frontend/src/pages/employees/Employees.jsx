@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutGrid,
   List,
@@ -15,9 +15,18 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { DataTable } from '../../components/common/DataTable';
+import { useAuth } from '../../context/AuthContext';
 
 export const Employees = () => {
+  const { currentUser, isEmployeeOnly, isHRorAdmin } = useAuth();
   const navigate = useNavigate();
+
+  // If user is a standard employee, redirect them directly to their own profile
+  if (isEmployeeOnly) {
+    const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
+    return <Navigate to={`/employees/${ownId}`} replace />;
+  }
+
   const [employees, setEmployees] = useState([]);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'list'
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,15 +164,17 @@ export const Employees = () => {
           </button>
         </div>
 
-        {/* Add Employee Button */}
-        <button
-          type="button"
-          onClick={handleAddEmployeeClick}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Employee
-        </button>
+        {/* Add Employee Button (Admin & HR Only) */}
+        {isHRorAdmin && (
+          <button
+            type="button"
+            onClick={handleAddEmployeeClick}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Employee
+          </button>
+        )}
       </PageHeader>
 
       {/* Filter and Search Bar */}

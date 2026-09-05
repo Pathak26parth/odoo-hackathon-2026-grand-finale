@@ -42,27 +42,30 @@ export const detectFace = async () => {
 /**
  * Verifies face identity against registered employee database via backend
  */
-export const verifyFace = async (targetEmployeeId, faceInput = 'live_camera_frame_data_hash', action = 'CHECK_IN') => {
+export const verifyFace = async (targetEmployeeId, faceInput = 'live_camera_frame_data_hash') => {
   try {
-    let result;
-    if (action === 'CHECK_OUT') {
-      result = await attendanceService.faceCheckOut(faceInput, targetEmployeeId);
-    } else {
-      result = await attendanceService.faceCheckIn(faceInput, targetEmployeeId);
-    }
+    const res = await attendanceService.verifyFace(faceInput, targetEmployeeId);
+    const payload = res.data || res;
+    const emp = payload.employee || {};
 
     return {
       success: true,
-      employeeId: targetEmployeeId,
+      employeeId: emp.employeeId || targetEmployeeId,
+      internalId: emp.id || null,
+      employeeName: emp.employeeName || 'Employee',
+      department: emp.department || 'General',
+      position: emp.position || 'Staff',
+      profilePhotoUrl: emp.profilePhotoUrl || null,
       verified: true,
-      confidence: result.similarityScore ? parseFloat((result.similarityScore * 100).toFixed(1)) : 98.7,
-      attendance: result.attendance,
-      message: result.message || 'Face verified successfully.'
+      confidence: payload.similarityScore ? parseFloat((payload.similarityScore * 100).toFixed(1)) : 98.5,
+      hasCheckedInToday: !!payload.hasCheckedInToday,
+      todayRecord: payload.todayRecord || null,
+      message: res.message || 'Face verified successfully.'
     };
   } catch (err) {
     return {
       success: false,
-      errorType: err.status === 400 ? 'Verification Failed' : 'Service Error',
+      errorType: 'Verification Failed',
       message: err.message || 'Identity verification failed.'
     };
   }

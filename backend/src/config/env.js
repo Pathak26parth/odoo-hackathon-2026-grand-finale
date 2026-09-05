@@ -40,7 +40,10 @@ const env = {
   // Cloudinary Cloud Storage
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
-  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || ''
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+
+  // Python AI Face Service
+  FACE_SERVICE_URL: process.env.FACE_SERVICE_URL || 'http://localhost:8000'
 };
 
 module.exports = env;

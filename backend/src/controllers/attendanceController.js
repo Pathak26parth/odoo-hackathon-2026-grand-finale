@@ -158,21 +158,88 @@ class AttendanceController {
   }
 
   /**
-   * Enroll Face Template (Self-Service)
-   * POST /api/face/enroll
+   * 1:1 Face Verification Only (Does not punch until confirmed)
+   * POST /api/attendance/face-verify
    */
-  async enrollFace(req, res, next) {
+  async faceVerify(req, res, next) {
     try {
       const employeeId = req.body.employeeId || req.user.employeeId;
-      const { faceData, livenessScore = 0.985 } = req.body;
+      const { faceInput, deviceInfo = 'WebCam' } = req.body;
 
       if (!employeeId) {
         return sendError(res, 'Employee ID is required.', 400);
       }
 
+      // 1. Run 1:1 Face & Liveness Verification
+      const verification = await faceVerificationService.verifyFace({
+        employeeId,
+        verificationType: 'KIOSK',
+        faceInput,
+        deviceInfo
+      });
+
+      if (!verification.verified) {
+        return sendError(res, verification.message, 400, { verificationStatus: verification.status });
+      }
+
+      // 2. Fetch employee details and today's attendance status
+      const employee = await faceVerificationService.resolveEmployee(employeeId);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayRecords = await query(
+        `SELECT id, check_in, check_out, status, worked_hours 
+         FROM attendance 
+         WHERE employee_id = ? AND date = ? 
+         ORDER BY id DESC LIMIT 1`,
+        [employee.id, todayStr]
+      );
+      const todayRecord = todayRecords.length > 0 ? todayRecords[0] : null;
+      const hasCheckedInToday = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+
+      // Fetch department and job position if available
+      const empDetails = await query(
+        `SELECT e.*, d.name as department_name FROM employees e LEFT JOIN departments d ON e.department_id = d.id WHERE e.id = ?`,
+        [employee.id]
+      );
+      const empInfo = empDetails[0] || employee;
+
+      return sendSuccess(res, 'Face verified successfully.', {
+        verificationStatus: 'SUCCESS',
+        similarityScore: verification.similarityScore,
+        livenessVerified: true,
+        employee: {
+          id: empInfo.id,
+          employeeId: empInfo.employee_code,
+          employeeName: `${empInfo.first_name} ${empInfo.last_name}`.trim(),
+          department: empInfo.department_name || 'General',
+          position: empInfo.job_position || 'Employee',
+          profilePhotoUrl: empInfo.profile_photo_url
+        },
+        hasCheckedInToday,
+        todayRecord
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Enroll Face Template (Self-Service)
+   * POST /api/attendance/face/enroll
+   */
+  async enrollFace(req, res, next) {
+    try {
+      const employeeId = req.body.employeeId || req.user.employeeId;
+      const { faceData, faceEmbeddingOrImage, faceInput, image, livenessScore = 0.985 } = req.body;
+
+      if (!employeeId) {
+        return sendError(res, 'Employee ID is required.', 400);
+      }
+
+      const input = faceData || faceEmbeddingOrImage || faceInput || image || `template_${employeeId}_${Date.now()}`;
+
       const result = await faceVerificationService.enrollFace({
         employeeId,
-        faceEmbeddingOrImage: faceData || `template_${employeeId}_${Date.now()}`,
+        faceEmbeddingOrImage: input,
         livenessScore
       });
 
@@ -245,13 +312,13 @@ class AttendanceController {
       const params = [];
 
       if (employeeId) {
-        sql += ' AND a.employee_id = ?';
-        params.push(employeeId);
+        sql += ' AND (a.employee_id = ? OR e.employee_code = ?)';
+        params.push(employeeId, employeeId);
       }
 
       if (departmentId) {
-        sql += ' AND e.department_id = ?';
-        params.push(departmentId);
+        sql += ' AND (e.department_id = ? OR d.name = ?)';
+        params.push(departmentId, departmentId);
       }
 
       if (date) {
@@ -372,8 +439,8 @@ class AttendanceController {
       const params = [];
 
       if (employeeId) {
-        sql += ' AND fvl.employee_id = ?';
-        params.push(employeeId);
+        sql += ' AND (fvl.employee_id = ? OR e.employee_code = ?)';
+        params.push(employeeId, employeeId);
       }
       if (status) {
         sql += ' AND fvl.status = ?';

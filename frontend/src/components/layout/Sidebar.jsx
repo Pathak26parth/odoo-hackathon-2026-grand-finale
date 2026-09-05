@@ -122,7 +122,9 @@ export const Sidebar = ({ isOpen, onClose }) => {
               {/* Employees (All can view; Employee views self) */}
               {renderSingleLink(
                 isEmployeeOnly ? 'My Profile' : 'Employees',
-                isEmployeeOnly ? `/employees/${currentUser?.employeeId || 'emp-1'}` : '/employees',
+                isEmployeeOnly
+                  ? `/employees/${currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1'}`
+                  : '/employees',
                 Users
               )}
 
@@ -426,38 +428,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
           )}
         </div>
 
-        {/* Bottom User Area & Quick Role Switcher */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50/50 space-y-2">
-          {/* Quick Role Switcher */}
-          <div className="flex flex-col gap-1 px-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-              Test Role View:
-            </span>
-            <div className="grid grid-cols-5 gap-1">
-              {[
-                { label: 'Admin', role: 'Admin' },
-                { label: 'PayMgr', role: 'HR Payroll Manager' },
-                { label: 'PayUsr', role: 'HR Payroll User' },
-                { label: 'HR', role: 'HR Manager' },
-                { label: 'Emp', role: 'Employee' }
-              ].map((item) => (
-                <button
-                  key={item.role}
-                  type="button"
-                  onClick={() => switchRole(item.role)}
-                  className={`text-[9px] py-1 px-0.5 rounded font-semibold text-center truncate transition-colors ${
-                    currentUser?.role === item.role
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                  title={`Switch role to ${item.role}`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
+        {/* Bottom User Profile Footer */}
+        <div className="p-3 border-t border-slate-200 bg-slate-50/50">
           <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
             <div className="flex items-center gap-2.5 min-w-0">
               <img

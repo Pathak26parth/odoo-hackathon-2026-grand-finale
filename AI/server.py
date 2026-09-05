@@ -33,19 +33,36 @@ PORT = int(os.getenv("PORT", os.getenv("FACE_SERVICE_PORT", "8000")))
 HOST = os.getenv("HOST", "0.0.0.0")
 
 
+import urllib.request
+import urllib.parse
+
 def _save_temp_image(data_str: str) -> str:
-    """Save base64 image data or return path if already a filepath."""
+    """Save base64 image data, download URL, or return path if already a filepath."""
     if not data_str:
         raise ValueError("Image data is empty")
     
     if os.path.exists(data_str):
         return data_str
+
+    # If HTTP/HTTPS URL, download into a temporary file
+    if data_str.startswith("http://") or data_str.startswith("https://"):
+        req = urllib.request.Request(data_str, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw_bytes = resp.read()
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        temp_file.write(raw_bytes)
+        temp_file.close()
+        return temp_file.name
     
     # Strip data URL header if present (e.g. data:image/jpeg;base64,...)
-    if "," in data_str and data_str.startswith("data:"):
-        data_str = data_str.split(",", 1)[1]
+    clean_data = data_str
+    if "," in clean_data and clean_data.startswith("data:"):
+        clean_data = clean_data.split(",", 1)[1]
     
-    raw_bytes = base64.b64decode(data_str)
+    # Pad base64 if needed
+    clean_data = clean_data.strip()
+    padded = clean_data + "=" * (-len(clean_data) % 4)
+    raw_bytes = base64.b64decode(padded)
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
     temp_file.write(raw_bytes)
     temp_file.close()
