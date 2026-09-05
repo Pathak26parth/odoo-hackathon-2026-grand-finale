@@ -1,3 +1,4 @@
+// components/layout/Sidebar.jsx
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -12,74 +13,62 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
-  UserCheck,
+  Sparkles,
+  LayoutDashboard,
   X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const Sidebar = ({ isOpen, onClose }) => {
-  const { currentUser, logout, switchRole, isEmployeeOnly } = useAuth();
+  const {
+    currentUser,
+    role,
+    logout,
+    switchRole,
+    isEmployeeOnly,
+    canAccessDashboard,
+    canAccessReports,
+    canManageUsers,
+    canViewPayrollConfig,
+    isHRorAdmin,
+    canRegisterFace
+  } = useAuth();
+
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Accordion states
+  const isAttendanceActive = location.pathname.startsWith('/attendance');
+  const [attendanceExpanded, setAttendanceExpanded] = useState(true);
+
   const isTimeOffActive = location.pathname.startsWith('/time-off');
   const [timeOffExpanded, setTimeOffExpanded] = useState(true);
+
+  const isPayrollActive = location.pathname.startsWith('/payroll');
+  const [payrollExpanded, setPayrollExpanded] = useState(true);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const navItems = [
-    { label: 'Employees', path: '/employees', icon: Users, enabled: true },
-    { label: 'Contracts', path: '/contracts', icon: FileText, enabled: true },
-    { label: 'Attendance', path: '/attendance', icon: Clock, enabled: true },
-    { label: 'Working Schedules', path: '/working-schedules', icon: Calendar, enabled: true }
-  ];
-
-  const futureItems = [
-    { label: 'Payroll', path: '/payroll', icon: CreditCard, enabled: false },
-    { label: 'Reports', path: '/reports', icon: BarChart3, enabled: false }
-  ];
-
-  const adminItems = [
-    { label: 'Users', path: '/admin/users', icon: Users, enabled: true },
-    { label: 'Roles & Permissions', path: '/admin/roles', icon: Shield, enabled: false }
-  ];
-
-  const renderNavLink = (item) => {
-    const Icon = item.icon;
-    if (!item.enabled) {
-      return (
-        <div
-          key={item.label}
-          title="Coming in next step"
-          className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-slate-400 rounded-lg cursor-not-allowed opacity-60"
-        >
-          <Icon className="w-4 h-4 shrink-0 text-slate-400" />
-          <span>{item.label}</span>
-        </div>
-      );
-    }
-
-    return (
-      <NavLink
-        key={item.label}
-        to={item.path}
-        onClick={onClose}
-        className={({ isActive }) =>
-          `flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-            isActive
-              ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`
-        }
-      >
-        <Icon className="w-4 h-4 shrink-0" />
-        <span>{item.label}</span>
-      </NavLink>
-    );
-  };
+  const renderSingleLink = (label, path, Icon) => (
+    <NavLink
+      key={label}
+      to={path}
+      onClick={onClose}
+      className={({ isActive }) =>
+        `flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+          isActive
+            ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs'
+            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+        }`
+      }
+    >
+      <Icon className="w-4 h-4 shrink-0 text-slate-500" />
+      <span>{label}</span>
+    </NavLink>
+  );
 
   return (
     <>
@@ -119,17 +108,128 @@ export const Sidebar = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Scrollable Nav Area */}
+        {/* Scrollable Navigation Area */}
         <div className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-          {/* Main Module Nav */}
+          {/* Dashboard & Core Section */}
           <div>
             <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Core Modules
+              Overview
             </p>
             <nav className="space-y-0.5">
-              {navItems.map(renderNavLink)}
+              {/* Dashboard Link (HR Payroll Manager & Admin only) */}
+              {canAccessDashboard && renderSingleLink('Dashboard', '/dashboard', LayoutDashboard)}
 
-              {/* Nested Time Off Navigation */}
+              {/* Employees (All can view; Employee views self) */}
+              {renderSingleLink(
+                isEmployeeOnly ? 'My Profile' : 'Employees',
+                isEmployeeOnly ? `/employees/${currentUser?.employeeId || 'emp-1'}` : '/employees',
+                Users
+              )}
+
+              {/* Contracts (Hidden for Employee) */}
+              {!isEmployeeOnly && renderSingleLink('Contracts', '/contracts', FileText)}
+
+              {/* Working Schedules (Hidden for Employee) */}
+              {!isEmployeeOnly && renderSingleLink('Working Schedules', '/working-schedules', Calendar)}
+            </nav>
+          </div>
+
+          {/* ATTENDANCE SECTION WITH SUB-ITEMS */}
+          <div>
+            <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Time &amp; Attendance
+            </p>
+            <nav className="space-y-0.5">
+              {/* Nested Attendance Accordion */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceExpanded(!attendanceExpanded)}
+                  className={`flex items-center justify-between w-full px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                    isAttendanceActive
+                      ? 'bg-blue-50/70 text-blue-700 font-semibold'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-4 h-4 shrink-0 text-blue-600" />
+                    <span>Attendance</span>
+                  </div>
+                  {attendanceExpanded ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  )}
+                </button>
+
+                {attendanceExpanded && (
+                  <div className="pl-9 pr-1 py-1 space-y-0.5 border-l border-slate-100 ml-5 my-0.5">
+                    <NavLink
+                      to="/attendance"
+                      end
+                      onClick={onClose}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          isActive
+                            ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }`
+                      }
+                    >
+                      <span>Attendance Records</span>
+                    </NavLink>
+
+                    <NavLink
+                      to="/attendance/face-check-in"
+                      onClick={onClose}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          isActive
+                            ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }`
+                      }
+                    >
+                      <Sparkles className="w-3 h-3 text-blue-500" />
+                      <span>Face Check-In</span>
+                    </NavLink>
+
+                    {canRegisterFace && (
+                      <NavLink
+                        to="/attendance/face-registration"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <span>Face Registration</span>
+                      </NavLink>
+                    )}
+
+                    {canRegisterFace && (
+                      <NavLink
+                        to="/attendance/face-history"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <span>Face History</span>
+                      </NavLink>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Nested Time Off Accordion */}
               <div className="pt-0.5">
                 <button
                   type="button"
@@ -151,7 +251,6 @@ export const Sidebar = ({ isOpen, onClose }) => {
                   )}
                 </button>
 
-                {/* Sub-routes */}
                 {timeOffExpanded && (
                   <div className="pl-9 pr-1 py-1 space-y-0.5 border-l border-slate-100 ml-5 my-0.5">
                     <NavLink
@@ -182,7 +281,6 @@ export const Sidebar = ({ isOpen, onClose }) => {
                       <span>Allocations</span>
                     </NavLink>
 
-                    {/* Time Off Types hidden for Employee role */}
                     {!isEmployeeOnly && (
                       <NavLink
                         to="/time-off/types"
@@ -201,41 +299,160 @@ export const Sidebar = ({ isOpen, onClose }) => {
                   </div>
                 )}
               </div>
-
-              {futureItems.map(renderNavLink)}
             </nav>
           </div>
 
-          {/* Admin Nav */}
-          <div>
-            <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Admin
-            </p>
-            <nav className="space-y-0.5">{adminItems.map(renderNavLink)}</nav>
-          </div>
+          {/* PAYROLL MODULE WITH SUB-ITEMS (Hidden for HR Manager & Employee) */}
+          {canViewPayrollConfig && (
+            <div>
+              <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Payroll Management
+              </p>
+              <nav className="space-y-0.5">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setPayrollExpanded(!payrollExpanded)}
+                    className={`flex items-center justify-between w-full px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                      isPayrollActive
+                        ? 'bg-blue-50/70 text-blue-700 font-semibold'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-4 h-4 shrink-0 text-blue-600" />
+                      <span>Payroll</span>
+                    </div>
+                    {payrollExpanded ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    )}
+                  </button>
+
+                  {payrollExpanded && (
+                    <div className="pl-9 pr-1 py-1 space-y-0.5 border-l border-slate-100 ml-5 my-0.5">
+                      <NavLink
+                        to="/payroll/payruns"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <span>Payruns</span>
+                      </NavLink>
+
+                      <NavLink
+                        to="/payroll/payslips"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <span>Payslips</span>
+                      </NavLink>
+
+                      <NavLink
+                        to="/payroll/salary-structures"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <span>Salary Structures</span>
+                      </NavLink>
+
+                      <NavLink
+                        to="/payroll/salary-rules"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <span>Salary Rules</span>
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              </nav>
+            </div>
+          )}
+
+          {/* REPORTS (HR Payroll Manager & Admin only) */}
+          {canAccessReports && (
+            <div>
+              <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Analytics
+              </p>
+              <nav className="space-y-0.5">
+                {renderSingleLink('Reports', '/reports', BarChart3)}
+              </nav>
+            </div>
+          )}
+
+          {/* ADMIN NAVIGATION (Admin only) */}
+          {canManageUsers && (
+            <div>
+              <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Administration
+              </p>
+              <nav className="space-y-0.5">
+                {renderSingleLink('Users', '/admin/users', Users)}
+                <div
+                  title="Role policies enforced via system matrix"
+                  className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-slate-400 rounded-lg cursor-not-allowed opacity-60"
+                >
+                  <Shield className="w-4 h-4 shrink-0 text-slate-400" />
+                  <span>Roles &amp; Permissions</span>
+                </div>
+              </nav>
+            </div>
+          )}
         </div>
 
         {/* Bottom User Area & Quick Role Switcher */}
         <div className="p-3 border-t border-slate-200 bg-slate-50/50 space-y-2">
           {/* Quick Role Switcher */}
-          <div className="flex items-center justify-between px-1">
+          <div className="flex flex-col gap-1 px-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-              Switch Role:
+              Test Role View:
             </span>
-            <div className="flex items-center gap-1">
-              {['Admin', 'HR Manager', 'Employee'].map((r) => (
+            <div className="grid grid-cols-5 gap-1">
+              {[
+                { label: 'Admin', role: 'Admin' },
+                { label: 'PayMgr', role: 'HR Payroll Manager' },
+                { label: 'PayUsr', role: 'HR Payroll User' },
+                { label: 'HR', role: 'HR Manager' },
+                { label: 'Emp', role: 'Employee' }
+              ].map((item) => (
                 <button
-                  key={r}
+                  key={item.role}
                   type="button"
-                  onClick={() => switchRole(r)}
-                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${
-                    currentUser?.role === r
-                      ? 'bg-blue-600 text-white'
+                  onClick={() => switchRole(item.role)}
+                  className={`text-[9px] py-1 px-0.5 rounded font-semibold text-center truncate transition-colors ${
+                    currentUser?.role === item.role
+                      ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                   }`}
-                  title={`Test as ${r}`}
+                  title={`Switch role to ${item.role}`}
                 >
-                  {r === 'HR Manager' ? 'HR' : r === 'Employee' ? 'Emp' : 'Admin'}
+                  {item.label}
                 </button>
               ))}
             </div>

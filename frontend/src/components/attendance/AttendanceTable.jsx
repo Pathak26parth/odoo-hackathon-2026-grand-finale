@@ -63,6 +63,30 @@ export const AttendanceTable = ({
       )
     },
     {
+      header: 'Method',
+      key: 'attendanceMethod',
+      render: (row) => (
+        <span className="text-xs font-medium text-slate-700">
+          {row.attendanceMethod || (row.isManualEdit ? 'Manual Entry' : 'Manual Entry')}
+        </span>
+      )
+    },
+    {
+      header: 'Verification',
+      key: 'faceVerified',
+      render: (row) => (
+        row.attendanceMethod === 'Face Recognition' || row.faceVerified ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            Verified ✓
+          </span>
+        ) : (
+          <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+            Manual
+          </span>
+        )
+      )
+    },
+    {
       header: 'Status',
       key: 'status',
       align: 'center',

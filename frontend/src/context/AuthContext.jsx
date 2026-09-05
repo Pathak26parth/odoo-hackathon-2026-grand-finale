@@ -109,17 +109,33 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem(AUTH_KEY, JSON.stringify(updated));
   };
 
+  // Role-based permissions
   const role = currentUser?.role || 'Admin';
-  const isHRorAdmin = role === 'Admin' || role === 'HR Manager' || role === 'HR Payroll User' || role === 'HR Payroll Manager';
+  const isHRorAdmin =
+    role === 'Admin' ||
+    role === 'HR Manager' ||
+    role === 'HR Payroll User' ||
+    role === 'HR Payroll Manager';
   const isEmployeeOnly = role === 'Employee';
   const canApproveTimeOff = isHRorAdmin;
   const canManageAllocations = isHRorAdmin;
   const canManageTimeOffTypes = isHRorAdmin;
 
+  // Payroll Configuration permissions
+  const canViewPayrollConfig =
+    role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User';
+  const canManagePayrollConfig =
+    role === 'Admin' || role === 'HR Payroll Manager';
+  const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager';
+  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager';
+  const canManageUsers = role === 'Admin';
+  const canRegisterFace = role !== 'Employee';
+
   return (
     <AuthContext.Provider
       value={{
         currentUser,
+        role,
         isAuthenticated: !!currentUser,
         login,
         logout,
@@ -128,7 +144,13 @@ export const AuthProvider = ({ children }) => {
         isEmployeeOnly,
         canApproveTimeOff,
         canManageAllocations,
-        canManageTimeOffTypes
+        canManageTimeOffTypes,
+        canViewPayrollConfig,
+        canManagePayrollConfig,
+        canAccessDashboard,
+        canAccessReports,
+        canManageUsers,
+        canRegisterFace
       }}
     >
       {children}

@@ -7,6 +7,7 @@ import {
   updateContract,
   checkContractOverlap
 } from '../../data/contracts';
+import { getSalaryStructures } from '../../data/salaryStructures';
 import { getEmployees } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 
@@ -134,11 +135,19 @@ export const ContractForm = () => {
     }
   };
 
+  const [availableStructures, setAvailableStructures] = useState([]);
+
+  useEffect(() => {
+    setAvailableStructures(getSalaryStructures());
+  }, []);
+
   const salaryStructures = [
-    'Standard Corporate Structure',
-    'Executive Leadership Structure',
-    'Part-Time Hourly Structure',
-    'Commission & Bonus Structure'
+    ...new Set([
+      ...availableStructures.map((s) => s.name),
+      'Standard Corporate Structure',
+      'Executive Leadership Structure',
+      'Part-Time Hourly Structure'
+    ])
   ];
 
   return (

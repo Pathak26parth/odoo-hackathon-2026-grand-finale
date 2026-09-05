@@ -76,13 +76,24 @@ export const Attendance = () => {
         title="Attendance"
         subtitle={`Shift check-in logs, worked hours, and exception monitoring (${records.length} records)`}
       >
-        <button
-          onClick={() => navigate('/attendance/new')}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Attendance
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/attendance/face-check-in')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg shadow-xs transition-colors"
+          >
+            <Clock className="w-3.5 h-3.5 text-blue-600" />
+            Face Check-In
+          </button>
+          {isHRorAdmin && (
+            <button
+              onClick={() => navigate('/attendance/new')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Attendance
+            </button>
+          )}
+        </div>
       </PageHeader>
 
       {/* Filter and Search Bar */}

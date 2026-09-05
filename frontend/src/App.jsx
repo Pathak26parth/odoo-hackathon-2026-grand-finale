@@ -4,10 +4,12 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 
-// Existing Pages
+// Authentication & Users
 import { Login } from './pages/auth/Login';
 import { Users } from './pages/admin/Users';
 import { UserForm } from './pages/admin/UserForm';
+
+// Employees & Contracts
 import { Employees } from './pages/employees/Employees';
 import { EmployeeDetail } from './pages/employees/EmployeeDetail';
 import { Contracts } from './pages/contracts/Contracts';
@@ -15,21 +17,35 @@ import { ContractForm } from './pages/contracts/ContractForm';
 import { WorkingSchedules } from './pages/schedules/WorkingSchedules';
 import { ScheduleForm } from './pages/schedules/ScheduleForm';
 
-// Module 9: Attendance
+// Attendance & Face Recognition
 import { Attendance } from './pages/attendance/Attendance';
 import { AttendanceDetail } from './pages/attendance/AttendanceDetail';
+import { FaceCheckIn } from './pages/attendance/FaceCheckIn';
+import { FaceRegistration } from './pages/attendance/FaceRegistration';
+import { FaceHistory } from './pages/attendance/FaceHistory';
 
-// Module 10: Time Off Requests
+// Time Off
 import { TimeOffRequests } from './pages/timeOff/TimeOffRequests';
 import { TimeOffRequestNew } from './pages/timeOff/TimeOffRequestNew';
-
-// Module 11: Time Off Allocations
 import { TimeOffAllocations } from './pages/timeOff/TimeOffAllocations';
 import { TimeOffAllocationNew } from './pages/timeOff/TimeOffAllocationNew';
-
-// Module 12: Time Off Types
 import { TimeOffTypes } from './pages/timeOff/TimeOffTypes';
 import { TimeOffTypeDetail } from './pages/timeOff/TimeOffTypeDetail';
+
+// Payroll
+import { SalaryStructures } from './pages/payroll/SalaryStructures';
+import { SalaryStructureDetail } from './pages/payroll/SalaryStructureDetail';
+import { SalaryRules } from './pages/payroll/SalaryRules';
+import { SalaryRuleDetail } from './pages/payroll/SalaryRuleDetail';
+import { Payruns } from './pages/payroll/Payruns';
+import { PayrunWizard } from './pages/payroll/PayrunWizard';
+import { PayrunDetail } from './pages/payroll/PayrunDetail';
+import { Payslips } from './pages/payroll/Payslips';
+import { PayslipDetail } from './pages/payroll/PayslipDetail';
+
+// Dashboard & Reports
+import { Dashboard } from './pages/dashboard/Dashboard';
+import { Reports } from './pages/reports/Reports';
 
 // App Layout with Sidebar & Header
 const AppLayout = () => {
@@ -39,6 +55,16 @@ const AppLayout = () => {
   // Dynamic breadcrumb generation based on route
   const getBreadcrumbs = () => {
     const path = location.pathname;
+
+    // Dashboard
+    if (path === '/dashboard') {
+      return [{ label: 'Dashboard' }];
+    }
+
+    // Reports
+    if (path === '/reports') {
+      return [{ label: 'Reports' }];
+    }
 
     // Admin Users
     if (path.startsWith('/admin/users/new')) {
@@ -113,7 +139,25 @@ const AppLayout = () => {
       return [{ label: 'Working Schedules' }];
     }
 
-    // Module 9: Attendance
+    // Attendance & Face Recognition
+    if (path === '/attendance/face-check-in') {
+      return [
+        { label: 'Attendance', link: '/attendance' },
+        { label: 'Face Attendance' }
+      ];
+    }
+    if (path === '/attendance/face-registration') {
+      return [
+        { label: 'Attendance', link: '/attendance' },
+        { label: 'Face Registration' }
+      ];
+    }
+    if (path === '/attendance/face-history') {
+      return [
+        { label: 'Attendance', link: '/attendance' },
+        { label: 'Face History' }
+      ];
+    }
     if (path === '/attendance/new') {
       return [
         { label: 'Attendance', link: '/attendance' },
@@ -130,7 +174,7 @@ const AppLayout = () => {
       return [{ label: 'Attendance' }];
     }
 
-    // Module 10: Time Off Requests
+    // Time Off
     if (path === '/time-off/requests/new') {
       return [
         { label: 'Time Off', link: '/time-off/requests' },
@@ -144,8 +188,6 @@ const AppLayout = () => {
         { label: 'Requests' }
       ];
     }
-
-    // Module 11: Time Off Allocations
     if (path === '/time-off/allocations/new') {
       return [
         { label: 'Time Off', link: '/time-off/allocations' },
@@ -159,8 +201,6 @@ const AppLayout = () => {
         { label: 'Allocations' }
       ];
     }
-
-    // Module 12: Time Off Types
     if (path === '/time-off/types/new') {
       return [
         { label: 'Time Off', link: '/time-off/types' },
@@ -179,6 +219,87 @@ const AppLayout = () => {
       return [
         { label: 'Time Off', link: '/time-off/types' },
         { label: 'Time Off Types' }
+      ];
+    }
+
+    // Payroll: Payruns
+    if (path === '/payroll/payruns/new') {
+      return [
+        { label: 'Payroll', link: '/payroll/payruns' },
+        { label: 'Payruns', link: '/payroll/payruns' },
+        { label: 'New Payrun' }
+      ];
+    }
+    if (path.startsWith('/payroll/payruns/') && path !== '/payroll/payruns') {
+      return [
+        { label: 'Payroll', link: '/payroll/payruns' },
+        { label: 'Payruns', link: '/payroll/payruns' },
+        { label: 'Payrun Processing' }
+      ];
+    }
+    if (path === '/payroll/payruns') {
+      return [
+        { label: 'Payroll', link: '/payroll/payruns' },
+        { label: 'Payruns' }
+      ];
+    }
+
+    // Payroll: Payslips
+    if (path.startsWith('/payroll/payslips/') && path !== '/payroll/payslips') {
+      return [
+        { label: 'Payroll', link: '/payroll/payslips' },
+        { label: 'Payslips', link: '/payroll/payslips' },
+        { label: 'Payslip Detail' }
+      ];
+    }
+    if (path === '/payroll/payslips') {
+      return [
+        { label: 'Payroll', link: '/payroll/payslips' },
+        { label: 'Payslips' }
+      ];
+    }
+
+    // Payroll: Salary Structures
+    if (path === '/payroll/salary-structures/new') {
+      return [
+        { label: 'Payroll', link: '/payroll/salary-structures' },
+        { label: 'Salary Structures', link: '/payroll/salary-structures' },
+        { label: 'New Structure' }
+      ];
+    }
+    if (path.startsWith('/payroll/salary-structures/') && path !== '/payroll/salary-structures') {
+      return [
+        { label: 'Payroll', link: '/payroll/salary-structures' },
+        { label: 'Salary Structures', link: '/payroll/salary-structures' },
+        { label: 'Structure Details' }
+      ];
+    }
+    if (path === '/payroll/salary-structures') {
+      return [
+        { label: 'Payroll', link: '/payroll/salary-structures' },
+        { label: 'Salary Structures' }
+      ];
+    }
+
+    // Payroll: Salary Rules
+    if (path === '/payroll/salary-rules/new') {
+      return [
+        { label: 'Payroll', link: '/payroll/salary-rules' },
+        { label: 'Salary Rules', link: '/payroll/salary-rules' },
+        { label: 'New Rule' }
+      ];
+    }
+    if (path.startsWith('/payroll/salary-rules/') && path !== '/payroll/salary-rules') {
+      return [
+        { label: 'Payroll', link: '/payroll/salary-rules' },
+        { label: 'Salary Rules', link: '/payroll/salary-rules' },
+        { label: 'Rule Details' }
+      ];
+    }
+    if (path === '/payroll/salary-rules') {
+      return [
+        { label: 'Payroll', link: '/payroll/salary-rules' },
+        { label: 'Salary Rules' }
       ];
     }
 
@@ -216,8 +337,9 @@ const ProtectedRoute = ({ children }) => {
 
 // Default index redirection
 const IndexRedirect = () => {
-  const { isAuthenticated } = useAuth();
-  return <Navigate to={isAuthenticated ? '/employees' : '/login'} replace />;
+  const { isAuthenticated, canAccessDashboard } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <Navigate to={canAccessDashboard ? '/dashboard' : '/employees'} replace />;
 };
 
 export default function App() {
@@ -238,24 +360,24 @@ export default function App() {
           >
             <Route path="/" element={<IndexRedirect />} />
 
-            {/* SCREEN 2: User Management List */}
-            <Route path="/admin/users" element={<Users />} />
+            {/* MODULE 23: Payroll Dashboard */}
+            <Route path="/dashboard" element={<Dashboard />} />
 
-            {/* SCREEN 3: Create / Edit User */}
+            {/* MODULE 24: Reports */}
+            <Route path="/reports" element={<Reports />} />
+
+            {/* SCREEN 2 & 3: User Management */}
+            <Route path="/admin/users" element={<Users />} />
             <Route path="/admin/users/new" element={<UserForm />} />
             <Route path="/admin/users/:id" element={<UserForm />} />
 
-            {/* SCREEN 4: Employee Management Landing */}
+            {/* SCREEN 4 & 5: Employee Management */}
             <Route path="/employees" element={<Employees />} />
-
-            {/* SCREEN 5: Employee Detail / Form */}
             <Route path="/employees/new" element={<EmployeeDetail />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
 
-            {/* SCREEN 6: Contracts List */}
+            {/* SCREEN 6 & 7: Contracts */}
             <Route path="/contracts" element={<Contracts />} />
-
-            {/* SCREEN 7: Contract Create / Edit Form */}
             <Route path="/contracts/new" element={<ContractForm />} />
             <Route path="/contracts/:id" element={<ContractForm />} />
 
@@ -264,10 +386,15 @@ export default function App() {
             <Route path="/working-schedules/new" element={<ScheduleForm />} />
             <Route path="/working-schedules/:id" element={<ScheduleForm />} />
 
-            {/* MODULE 9: Attendance */}
+            {/* MODULE 9: Attendance Records */}
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/attendance/new" element={<AttendanceDetail />} />
             <Route path="/attendance/:id" element={<AttendanceDetail />} />
+
+            {/* MODULE 15: Face Recognition Attendance */}
+            <Route path="/attendance/face-check-in" element={<FaceCheckIn />} />
+            <Route path="/attendance/face-registration" element={<FaceRegistration />} />
+            <Route path="/attendance/face-history" element={<FaceHistory />} />
 
             {/* MODULE 10: Time Off Requests */}
             <Route path="/time-off/requests" element={<TimeOffRequests />} />
@@ -281,6 +408,25 @@ export default function App() {
             <Route path="/time-off/types" element={<TimeOffTypes />} />
             <Route path="/time-off/types/new" element={<TimeOffTypeDetail />} />
             <Route path="/time-off/types/:id" element={<TimeOffTypeDetail />} />
+
+            {/* MODULE 13: Salary Structures */}
+            <Route path="/payroll/salary-structures" element={<SalaryStructures />} />
+            <Route path="/payroll/salary-structures/new" element={<SalaryStructureDetail />} />
+            <Route path="/payroll/salary-structures/:id" element={<SalaryStructureDetail />} />
+
+            {/* MODULE 14: Salary Rules */}
+            <Route path="/payroll/salary-rules" element={<SalaryRules />} />
+            <Route path="/payroll/salary-rules/new" element={<SalaryRuleDetail />} />
+            <Route path="/payroll/salary-rules/:id" element={<SalaryRuleDetail />} />
+
+            {/* MODULE 16 & 17 & 18: Payruns */}
+            <Route path="/payroll/payruns" element={<Payruns />} />
+            <Route path="/payroll/payruns/new" element={<PayrunWizard />} />
+            <Route path="/payroll/payruns/:id" element={<PayrunDetail />} />
+
+            {/* MODULE 19 & 20 & 21: Payslips */}
+            <Route path="/payroll/payslips" element={<Payslips />} />
+            <Route path="/payroll/payslips/:id" element={<PayslipDetail />} />
           </Route>
 
           {/* Catch-all fallback */}
