@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Save, ArrowLeft, Clock, Info, CheckCircle2 } from 'lucide-react';
 import { calculateDuration } from '../../data/timeOffRequests';
-import { getEmployeeAllocations } from '../../data/allocations';
+import { getEmployeeAllocations, fetchAllocationsAsync } from '../../data/allocations';
 import { LeaveBalanceCard } from './LeaveBalanceCard';
 
 export const TimeOffRequestForm = ({
@@ -67,8 +67,14 @@ export const TimeOffRequestForm = ({
     if (formData.employeeId) {
       const allocs = getEmployeeAllocations(formData.employeeId);
       setEmployeeAllocations(allocs);
+      fetchAllocationsAsync().then((list) => {
+        if (Array.isArray(list)) {
+          const fresh = list.filter((a) => String(a.employeeId) === String(formData.employeeId) || a.employeeCode === formData.employeeCode);
+          setEmployeeAllocations(fresh);
+        }
+      }).catch(console.error);
     }
-  }, [formData.employeeId]);
+  }, [formData.employeeId, formData.employeeCode]);
 
   // Update matching allocation whenever selected type changes
   useEffect(() => {

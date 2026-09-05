@@ -4,7 +4,8 @@ import { ArrowLeft, Check, ShieldAlert } from 'lucide-react';
 import {
   getSalaryRuleById,
   createSalaryRule,
-  updateSalaryRule
+  updateSalaryRule,
+  fetchSalaryRulesAsync
 } from '../../data/salaryRules';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -29,10 +30,13 @@ export const SalaryRuleDetail = () => {
       const existing = getSalaryRuleById(id);
       if (existing) {
         setRuleData(existing);
-      } else {
-        alert('Salary rule not found');
-        navigate('/payroll/salary-rules');
       }
+      fetchSalaryRulesAsync().then((list) => {
+        if (Array.isArray(list)) {
+          const match = list.find((r) => String(r.id) === String(id));
+          if (match) setRuleData(match);
+        }
+      }).catch(console.error);
     }
   }, [id, isCreate, navigate]);
 
@@ -50,13 +54,13 @@ export const SalaryRuleDetail = () => {
     );
   }
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
       if (isCreate) {
-        createSalaryRule(data);
+        await createSalaryRule(data);
         setToastMessage(`Salary rule "${data.name}" created!`);
       } else {
-        updateSalaryRule(id, data);
+        await updateSalaryRule(id, data);
         setToastMessage(`Salary rule "${data.name}" updated!`);
       }
 

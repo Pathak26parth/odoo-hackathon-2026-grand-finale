@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
-import { getTimeOffTypeById, createTimeOffType, updateTimeOffType } from '../../data/timeOffTypes';
+import { getTimeOffTypeById, createTimeOffType, updateTimeOffType, fetchTimeOffTypesAsync } from '../../data/timeOffTypes';
 import { PageHeader } from '../../components/common/PageHeader';
 import { TimeOffTypeForm } from '../../components/timeOff/TimeOffTypeForm';
 
@@ -18,20 +18,23 @@ export const TimeOffTypeDetail = () => {
       const existing = getTimeOffTypeById(id);
       if (existing) {
         setTypeData(existing);
-      } else {
-        alert('Time off type not found');
-        navigate('/time-off/types');
       }
+      fetchTimeOffTypesAsync().then((list) => {
+        if (Array.isArray(list)) {
+          const match = list.find((t) => String(t.id) === String(id));
+          if (match) setTypeData(match);
+        }
+      }).catch(console.error);
     }
   }, [id, isCreate, navigate]);
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
       if (isCreate) {
-        createTimeOffType(data);
+        await createTimeOffType(data);
         setToastMessage(`Time off type "${data.name}" created!`);
       } else {
-        updateTimeOffType(id, data);
+        await updateTimeOffType(id, data);
         setToastMessage(`Time off type "${data.name}" updated!`);
       }
 

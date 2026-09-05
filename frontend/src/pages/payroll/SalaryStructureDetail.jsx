@@ -4,9 +4,10 @@ import { ArrowLeft, Check, ShieldAlert } from 'lucide-react';
 import {
   getSalaryStructureById,
   createSalaryStructure,
-  updateSalaryStructure
+  updateSalaryStructure,
+  fetchSalaryStructuresAsync
 } from '../../data/salaryStructures';
-import { getSalaryRules } from '../../data/salaryRules';
+import { getSalaryRules, fetchSalaryRulesAsync } from '../../data/salaryRules';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SalaryStructureForm } from '../../components/payroll/SalaryStructureForm';
@@ -28,14 +29,21 @@ export const SalaryStructureDetail = () => {
   useEffect(() => {
     setAvailableRules(getSalaryRules());
 
+    fetchSalaryRulesAsync().then((rules) => {
+      if (Array.isArray(rules)) setAvailableRules(rules);
+    }).catch(console.error);
+
     if (!isCreate) {
       const existing = getSalaryStructureById(id);
       if (existing) {
         setStructure(existing);
-      } else {
-        alert('Salary Structure not found');
-        navigate('/payroll/salary-structures');
       }
+      fetchSalaryStructuresAsync().then((list) => {
+        if (Array.isArray(list)) {
+          const match = list.find((s) => String(s.id) === String(id));
+          if (match) setStructure(match);
+        }
+      }).catch(console.error);
     }
   }, [id, isCreate, navigate]);
 
@@ -53,13 +61,13 @@ export const SalaryStructureDetail = () => {
     );
   }
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
       if (isCreate) {
-        createSalaryStructure(data);
+        await createSalaryStructure(data);
         setToastMessage(`Salary structure "${data.name}" created!`);
       } else {
-        updateSalaryStructure(id, data);
+        await updateSalaryStructure(id, data);
         setToastMessage(`Salary structure "${data.name}" updated!`);
       }
 

@@ -148,40 +148,72 @@ class ContractController {
         salaryStructureId,
         salaryStructure,
         workingScheduleId,
+        workingSchedule,
         startDate,
         endDate,
         status = 'ACTIVE'
       } = req.body;
 
-      const resolvedWage = wage !== undefined ? wage : salary;
-      const resolvedPosition = jobPosition !== undefined ? jobPosition : (position !== undefined ? position : null);
+      const resolvedWage = wage !== undefined && wage !== null ? wage : salary;
+      const resolvedJob = jobPosition || position || 'Staff';
 
-      if (!employeeId || !resolvedWage || !startDate) {
+      if (!employeeId || resolvedWage === undefined || resolvedWage === null || !startDate) {
         return sendError(res, 'employeeId, wage, and startDate are required.', 400);
       }
 
-      // Resolve departmentId if name provided
-      let resolvedDeptId = departmentId ? Number(departmentId) : null;
+      // 1. Resolve Employee ID
+      let resolvedEmpId = null;
+      const cleanEmp = String(employeeId).trim();
+      if (/^\d+$/.test(cleanEmp)) {
+        resolvedEmpId = parseInt(cleanEmp, 10);
+      } else {
+        const empRows = await query('SELECT id, department_id, job_position FROM employees WHERE employee_code = ? OR email = ? LIMIT 1', [cleanEmp, cleanEmp]);
+        if (empRows.length > 0) {
+          resolvedEmpId = empRows[0].id;
+        }
+      }
+
+      if (!resolvedEmpId) {
+        return sendError(res, `Employee not found for "${employeeId}".`, 404);
+      }
+
+      // 2. Resolve Department ID
+      let resolvedDeptId = departmentId ? parseInt(departmentId, 10) : null;
       if (!resolvedDeptId && department) {
-        const deptRows = await query('SELECT id FROM departments WHERE name = ? LIMIT 1', [department]);
+        const deptRows = await query('SELECT id FROM departments WHERE name = ? OR code = ? LIMIT 1', [department, department]);
         if (deptRows.length > 0) resolvedDeptId = deptRows[0].id;
       }
 
-      // Resolve salaryStructureId if name provided
-      let resolvedStructureId = salaryStructureId ? Number(salaryStructureId) : null;
+      // 3. Resolve Salary Structure ID
+      let resolvedStructureId = salaryStructureId ? parseInt(salaryStructureId, 10) : null;
       if (!resolvedStructureId && salaryStructure) {
-        const structRows = await query('SELECT id FROM salary_structures WHERE name = ? LIMIT 1', [salaryStructure]);
+        const structRows = await query('SELECT id FROM salary_structures WHERE name = ? OR code = ? LIMIT 1', [salaryStructure, salaryStructure]);
         if (structRows.length > 0) resolvedStructureId = structRows[0].id;
       }
-      if (!resolvedStructureId) resolvedStructureId = 1;
+      if (!resolvedStructureId) {
+        // Fallback to first available structure
+        const defaultStruct = await query('SELECT id FROM salary_structures ORDER BY id ASC LIMIT 1');
+        resolvedStructureId = defaultStruct.length > 0 ? defaultStruct[0].id : 1;
+      }
 
-      const cCode = contractCode || `CON-${employeeId}-${Date.now().toString().slice(-4)}`;
+      // 4. Resolve Working Schedule ID
+      let resolvedScheduleId = workingScheduleId ? parseInt(workingScheduleId, 10) : null;
+      if (!resolvedScheduleId && workingSchedule) {
+        const schedRows = await query('SELECT id FROM working_schedules WHERE name = ? LIMIT 1', [workingSchedule]);
+        if (schedRows.length > 0) resolvedScheduleId = schedRows[0].id;
+      }
+      if (!resolvedScheduleId) {
+        const defaultSched = await query('SELECT id FROM working_schedules ORDER BY id ASC LIMIT 1');
+        resolvedScheduleId = defaultSched.length > 0 ? defaultSched[0].id : 1;
+      }
 
-      // Strict Business Rule: Only ONE ACTIVE contract per employee at a time
-      if (status === 'ACTIVE') {
+      const cCode = contractCode || `CON-${resolvedEmpId}-${Date.now().toString().slice(-4)}`;
+
+      // If status is ACTIVE, ensure no overlapping ACTIVE contract exists for this employee
+      if (status && status.toUpperCase() === 'ACTIVE') {
         await query(
           'UPDATE contracts SET status = "EXPIRED", updated_at = NOW() WHERE employee_id = ? AND status = "ACTIVE"',
-          [employeeId]
+          [resolvedEmpId]
         );
       }
 
@@ -190,15 +222,15 @@ class ContractController {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           cCode,
-          employeeId,
+          resolvedEmpId,
           resolvedDeptId || null,
-          resolvedPosition || null,
+          resolvedJob,
           parseFloat(resolvedWage) || 0,
           resolvedStructureId,
-          workingScheduleId ? Number(workingScheduleId) : null,
+          resolvedScheduleId,
           startDate,
           endDate || null,
-          status
+          (status || 'ACTIVE').toUpperCase()
         ]
       );
 
@@ -236,6 +268,7 @@ class ContractController {
         salaryStructureId,
         salaryStructure,
         workingScheduleId,
+        workingSchedule,
         startDate,
         endDate,
         status
@@ -257,17 +290,24 @@ class ContractController {
       }
 
       // Resolve departmentId if name provided
-      let resolvedDeptId = departmentId !== undefined ? (departmentId ? Number(departmentId) : null) : undefined;
+      let resolvedDeptId = departmentId !== undefined ? (departmentId ? parseInt(departmentId, 10) : null) : undefined;
       if (resolvedDeptId === undefined && department) {
-        const deptRows = await query('SELECT id FROM departments WHERE name = ? LIMIT 1', [department]);
+        const deptRows = await query('SELECT id FROM departments WHERE name = ? OR code = ? LIMIT 1', [department, department]);
         if (deptRows.length > 0) resolvedDeptId = deptRows[0].id;
       }
 
       // Resolve salaryStructureId if name provided
-      let resolvedStructureId = salaryStructureId !== undefined ? (salaryStructureId ? Number(salaryStructureId) : null) : undefined;
+      let resolvedStructureId = salaryStructureId !== undefined ? (salaryStructureId ? parseInt(salaryStructureId, 10) : null) : undefined;
       if (resolvedStructureId === undefined && salaryStructure) {
-        const structRows = await query('SELECT id FROM salary_structures WHERE name = ? LIMIT 1', [salaryStructure]);
+        const structRows = await query('SELECT id FROM salary_structures WHERE name = ? OR code = ? LIMIT 1', [salaryStructure, salaryStructure]);
         if (structRows.length > 0) resolvedStructureId = structRows[0].id;
+      }
+
+      // Resolve workingScheduleId if name provided
+      let resolvedScheduleId = workingScheduleId !== undefined ? (workingScheduleId ? parseInt(workingScheduleId, 10) : null) : undefined;
+      if (resolvedScheduleId === undefined && workingSchedule) {
+        const schedRows = await query('SELECT id FROM working_schedules WHERE name = ? LIMIT 1', [workingSchedule]);
+        if (schedRows.length > 0) resolvedScheduleId = schedRows[0].id;
       }
 
       const resolvedPosition = jobPosition !== undefined ? jobPosition : (position !== undefined ? position : undefined);
@@ -292,9 +332,9 @@ class ContractController {
         fields.push('salary_structure_id = ?');
         params.push(resolvedStructureId || null);
       }
-      if (workingScheduleId !== undefined) {
+      if (resolvedScheduleId !== undefined) {
         fields.push('working_schedule_id = ?');
-        params.push(workingScheduleId ? Number(workingScheduleId) : null);
+        params.push(resolvedScheduleId || null);
       }
       if (startDate !== undefined) {
         fields.push('start_date = ?');

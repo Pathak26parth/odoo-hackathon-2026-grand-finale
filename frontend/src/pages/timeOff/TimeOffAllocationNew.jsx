@@ -26,9 +26,9 @@ export const TimeOffAllocationNew = () => {
     }).catch(console.error);
   }, []);
 
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     try {
-      createAllocation(data);
+      await createAllocation(data);
       setToastMessage(`Allocation granted for ${data.employeeName}!`);
       setTimeout(() => {
         navigate('/time-off/allocations');
