@@ -1,8 +1,20 @@
-import React, { createContext, useContext, useState } from 'react';
-import { getUsers } from '../data/users';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import authService from '../services/authService';
+import { getStoredToken, clearStoredTokens } from '../services/api';
 
 const AuthContext = createContext(null);
 const AUTH_KEY = 'peoplepay360_current_user';
+
+function normalizeRole(roleStr) {
+  if (!roleStr) return 'Employee';
+  const clean = String(roleStr).toUpperCase().replace(/\s+/g, '_');
+  if (clean === 'ADMIN') return 'Admin';
+  if (clean === 'HR_MANAGER') return 'HR Manager';
+  if (clean === 'HR_PAYROLL_ADMIN' || clean === 'HR_PAYROLL_MANAGER') return 'HR Payroll Manager';
+  if (clean === 'HR_PAYROLL_USER') return 'HR Payroll User';
+  if (clean === 'EMPLOYEE') return 'Employee';
+  return roleStr;
+}
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -12,131 +24,162 @@ export const AuthProvider = ({ children }) => {
     } catch {
       // fallback
     }
-    // Default admin user
-    return {
-      id: 'usr-1',
-      name: 'Admin User',
-      email: 'admin@peoplepay360.com',
-      role: 'Admin',
-      employeeId: 'emp-1',
-      employeeName: 'Amelia Johnson',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
-    };
+    return null;
   });
 
-  const login = (email, password) => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const users = getUsers();
-    const found = users.find((u) => u.email.toLowerCase() === trimmedEmail);
+  const [loading, setLoading] = useState(true);
 
-    if (found && (password === 'admin123' || password === 'password')) {
-      const userObj = {
-        id: found.id,
-        name: found.name,
-        email: found.email,
-        role: found.role,
-        employeeId: found.employeeId || 'emp-1',
-        employeeName: found.employeeName || found.name,
-        avatar:
-          found.avatar ||
-          'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
-      };
-      setCurrentUser(userObj);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
-      return userObj;
-    }
+  // Restore authenticated session from backend on mount
+  useEffect(() => {
+    const restoreSession = async () => {
+      const token = getStoredToken();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-    // Default mock user
-    if (trimmedEmail === 'admin@peoplepay360.com' && password === 'admin123') {
-      const userObj = {
-        id: 'usr-1',
-        name: 'Admin User',
-        email: 'admin@peoplepay360.com',
-        role: 'Admin',
-        employeeId: 'emp-1',
-        employeeName: 'Amelia Johnson',
-        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
-      };
-      setCurrentUser(userObj);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
-      return userObj;
-    }
+      try {
+        const userData = await authService.getCurrentUser();
+        const normRole = normalizeRole(userData.role);
+        const userObj = {
+          id: String(userData.id),
+          email: userData.email,
+          name: userData.employee ? `${userData.employee.firstName || ''} ${userData.employee.lastName || ''}`.trim() || userData.employee.fullName || userData.email.split('@')[0] : userData.email.split('@')[0],
+          role: normRole,
+          roleRaw: userData.role,
+          employeeId: userData.employee?.employeeCode || (userData.employee_id ? `EMP-${String(userData.employee_id).padStart(3, '0')}` : null),
+          internalEmployeeId: userData.employee?.id || userData.employee_id || null,
+          employeeName: userData.employee?.fullName || null,
+          department: userData.employee?.departmentName || 'General',
+          position: userData.employee?.jobPosition || normRole,
+          avatar: userData.employee?.profilePhotoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+          permissions: userData.permissions || [],
+          faceEnrollmentStatus: userData.employee?.faceEnrollmentStatus || 'NOT_ENROLLED'
+        };
 
-    if (password === 'admin123') {
-      const userObj = {
-        id: `usr-${Date.now()}`,
-        name: trimmedEmail.split('@')[0].replace('.', ' ').replace(/^\w/, (c) => c.toUpperCase()),
-        email: trimmedEmail,
-        role: 'Admin',
-        employeeId: 'emp-1',
-        employeeName: 'Amelia Johnson',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
-      };
-      setCurrentUser(userObj);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
-      return userObj;
-    }
-
-    throw new Error('Invalid email or password. Use admin@peoplepay360.com / admin123');
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem(AUTH_KEY);
-  };
-
-  // Quick switcher for seamless role testing in pairs or reviews
-  const switchRole = (newRole) => {
-    if (!currentUser) return;
-    let employeeId = currentUser.employeeId;
-    let employeeName = currentUser.employeeName;
-
-    if (newRole === 'Employee') {
-      employeeId = 'emp-1';
-      employeeName = 'Amelia Johnson';
-    } else if (newRole === 'HR Manager') {
-      employeeId = 'emp-2';
-      employeeName = 'Ethan Williams';
-    }
-
-    const updated = {
-      ...currentUser,
-      role: newRole,
-      employeeId,
-      employeeName
+        setCurrentUser(userObj);
+        localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
+      } catch (err) {
+        console.warn('[Auth] Session restoration failed, clearing token:', err.message);
+        clearStoredTokens();
+        setCurrentUser(null);
+        localStorage.removeItem(AUTH_KEY);
+      } finally {
+        setLoading(false);
+      }
     };
-    setCurrentUser(updated);
-    localStorage.setItem(AUTH_KEY, JSON.stringify(updated));
+
+    restoreSession();
+
+    const handleUnauthorized = () => {
+      logout();
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, []);
+
+  const login = async (email, password) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    
+    // Call real backend authentication
+    const authData = await authService.login(trimmedEmail, password);
+    const u = authData.user;
+    const normRole = normalizeRole(u.role);
+
+    const userObj = {
+      id: String(u.id),
+      email: u.email,
+      name: u.name || u.email.split('@')[0],
+      role: normRole,
+      roleRaw: u.role,
+      employeeId: u.employeeCode || (u.employeeId ? `EMP-${String(u.employeeId).padStart(3, '0')}` : null),
+      internalEmployeeId: u.employeeId || null,
+      employeeName: u.name || null,
+      department: u.departmentName || 'General',
+      position: u.jobPosition || normRole,
+      avatar: u.profilePhotoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+      permissions: u.permissions || [],
+      faceEnrollmentStatus: u.faceEnrollmentStatus || 'NOT_ENROLLED'
+    };
+
+    setCurrentUser(userObj);
+    localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
+    return userObj;
   };
 
-  // Role-based permissions
-  const role = currentUser?.role || 'Admin';
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // ignore
+    } finally {
+      clearStoredTokens();
+      setCurrentUser(null);
+      localStorage.removeItem(AUTH_KEY);
+    }
+  };
+
+  // Quick switcher for demo and review testing
+  const switchRole = async (newRole) => {
+    // Map role to seeded demo account
+    const roleMap = {
+      'Admin': { email: 'admin@peoplepay360.com', pass: 'Admin@123' },
+      'HR Manager': { email: 'hrmanager@peoplepay360.com', pass: 'Password@123' },
+      'HR Payroll Manager': { email: 'payrolladmin@peoplepay360.com', pass: 'Password@123' },
+      'HR Payroll User': { email: 'payrolluser@peoplepay360.com', pass: 'Password@123' },
+      'Employee': { email: 'employee@peoplepay360.com', pass: 'Password@123' }
+    };
+
+    const target = roleMap[newRole];
+    if (target) {
+      try {
+        await login(target.email, target.pass);
+      } catch (e) {
+        console.warn('[SwitchRole] Fast switch fallback:', e.message);
+      }
+    }
+  };
+
+  // Dynamic Permission Checks
+  const role = currentUser?.role || 'Guest';
+  const permissions = currentUser?.permissions || [];
+
+  const can = (permissionCode) => {
+    if (role === 'Admin') return true;
+    return permissions.includes(permissionCode);
+  };
+
   const isHRorAdmin =
     role === 'Admin' ||
     role === 'HR Manager' ||
     role === 'HR Payroll User' ||
     role === 'HR Payroll Manager';
+
   const isEmployeeOnly = role === 'Employee';
-  const canApproveTimeOff = isHRorAdmin;
-  const canManageAllocations = isHRorAdmin;
-  const canManageTimeOffTypes = isHRorAdmin;
+  const canApproveTimeOff = role === 'Admin' || role === 'HR Manager' || can('timeoff.approve');
+  const canManageAllocations = role === 'Admin' || role === 'HR Manager' || can('timeoff.allocations_manage');
+  const canManageTimeOffTypes = role === 'Admin' || role === 'HR Manager' || can('timeoff.types_manage');
 
   // Payroll Configuration permissions
   const canViewPayrollConfig =
-    role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User';
+    role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User' || can('payroll.read');
   const canManagePayrollConfig =
-    role === 'Admin' || role === 'HR Payroll Manager';
-  const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager';
-  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager';
-  const canManageUsers = role === 'Admin';
-  const canRegisterFace = role !== 'Employee';
+    role === 'Admin' || role === 'HR Payroll Manager' || can('salary_rules.manage');
+  const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || can('dashboard.read');
+  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager' || can('dashboard.read');
+  const canManageUsers = role === 'Admin' || can('users.manage') || can('users.create');
+  const canRegisterFace = role !== 'Guest';
 
   return (
     <AuthContext.Provider
       value={{
         currentUser,
         role,
+        permissions,
+        can,
         isAuthenticated: !!currentUser,
+        loading,
         login,
         logout,
         switchRole,
@@ -165,3 +208,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default AuthContext;
