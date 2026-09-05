@@ -93,11 +93,7 @@ export const Attendance = () => {
 
   const loadCorrectionRequests = async () => {
     try {
-      const params = {};
-      if (correctionStatusFilter && correctionStatusFilter !== 'All') {
-        params.status = correctionStatusFilter;
-      }
-      const res = await attendanceService.getCorrectionRequests(params);
+      const res = await attendanceService.getCorrectionRequests({ limit: 100 });
       const list = res?.requests || res?.data?.requests || (Array.isArray(res) ? res : []);
       setCorrectionRequests(list);
     } catch (err) {
@@ -107,11 +103,12 @@ export const Attendance = () => {
 
   useEffect(() => {
     loadData();
+    loadCorrectionRequests();
   }, [isEmployeeOnly]);
 
   useEffect(() => {
     loadCorrectionRequests();
-  }, [correctionStatusFilter, activeTab]);
+  }, [activeTab]);
 
   useEffect(() => {
     if (employeeFilterParam) {
