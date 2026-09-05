@@ -46,10 +46,14 @@ export const contractService = {
   async createContract(payload) {
     const res = await api.post('/contracts', {
       employeeId: payload.internalEmployeeId || payload.employeeId,
-      departmentId: payload.departmentId ? Number(payload.departmentId) : null,
+      departmentId: payload.departmentId ? Number(payload.departmentId) : undefined,
+      department: payload.department || undefined,
       jobPosition: payload.position || payload.jobPosition,
+      position: payload.position,
       wage: payload.wage || payload.salary,
-      salaryStructureId: payload.salaryStructureId ? Number(payload.salaryStructureId) : 1,
+      salary: payload.wage || payload.salary,
+      salaryStructureId: payload.salaryStructureId ? Number(payload.salaryStructureId) : undefined,
+      salaryStructure: payload.salaryStructure || payload.structure || undefined,
       workingScheduleId: payload.workingScheduleId ? Number(payload.workingScheduleId) : 1,
       startDate: payload.startDate,
       endDate: payload.endDate || null,
@@ -61,12 +65,16 @@ export const contractService = {
   async updateContract(id, payload) {
     const res = await api.put(`/contracts/${id}`, {
       departmentId: payload.departmentId ? Number(payload.departmentId) : undefined,
+      department: payload.department || undefined,
       jobPosition: payload.position || payload.jobPosition,
+      position: payload.position,
       wage: payload.wage || payload.salary,
+      salary: payload.wage || payload.salary,
       salaryStructureId: payload.salaryStructureId ? Number(payload.salaryStructureId) : undefined,
+      salaryStructure: payload.salaryStructure || payload.structure || undefined,
       workingScheduleId: payload.workingScheduleId ? Number(payload.workingScheduleId) : undefined,
       startDate: payload.startDate,
-      endDate: payload.endDate,
+      endDate: payload.endDate ? payload.endDate : null,
       status: payload.status ? payload.status.toUpperCase() : undefined
     });
     return res.data;
