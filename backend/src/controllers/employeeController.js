@@ -2,6 +2,7 @@ const { query } = require('../config/db');
 const { sendSuccess, sendCreated, sendError, maskAccountNumber } = require('../utils/response');
 const authService = require('../services/authService');
 const cloudinaryService = require('../services/cloudinaryService');
+const { sendEmployeeEmailUpdated } = require('../services/emailService');
 
 /**
  * Employee Master Management Controller
@@ -40,13 +41,19 @@ class EmployeeController {
           ws.name AS schedule_name,
           fe.enrollment_status AS face_enrollment_status,
           c.wage AS current_wage,
-          c.id AS active_contract_id
+          c.id AS active_contract_id,
+          u.id AS user_id,
+          r.name AS user_role,
+          r.name AS role,
+          r.display_name AS user_role_display
         FROM employees e
         LEFT JOIN departments d ON e.department_id = d.id
         LEFT JOIN employees m ON e.manager_id = m.id
         LEFT JOIN working_schedules ws ON e.working_schedule_id = ws.id
         LEFT JOIN face_enrollments fe ON e.id = fe.employee_id
         LEFT JOIN contracts c ON e.id = c.employee_id AND c.status = 'ACTIVE'
+        LEFT JOIN users u ON e.id = u.employee_id
+        LEFT JOIN roles r ON u.role_id = r.id
         WHERE 1=1
       `;
       const params = [];
@@ -206,7 +213,11 @@ class EmployeeController {
         joiningDate,
         profilePhotoUrl,
         avatar,
-        roleName = 'EMPLOYEE',
+        role,
+        roleName,
+        role_name,
+        roleId,
+        role_id,
         bankDetails,
         initialContract
       } = req.body;
@@ -226,8 +237,9 @@ class EmployeeController {
         }
       }
 
-      // Security check: Only System Admin can assign elevated roles; HR Manager always creates EMPLOYEE role
-      const effectiveRole = req.user.role === 'ADMIN' ? (roleName || 'EMPLOYEE') : 'EMPLOYEE';
+      // Resolve effective role for user account creation
+      const chosenRole = role || roleName || role_name || (roleId ? String(roleId) : (role_id ? String(role_id) : 'EMPLOYEE'));
+      const effectiveRole = chosenRole || 'EMPLOYEE';
 
       const result = await authService.createEmployeeWithAccount({
         employeeData: {
@@ -269,27 +281,46 @@ class EmployeeController {
       const {
         firstName,
         lastName,
+        first_name,
+        last_name,
+        email,
         phone,
         jobPosition,
+        position,
+        job_position,
         departmentId,
+        department_id,
+        department,
         managerId,
+        manager_id,
+        manager,
         workingScheduleId,
+        working_schedule_id,
+        schedule,
         gender,
         dateOfBirth,
+        date_of_birth,
         joiningDate,
+        joining_date,
         status,
         profilePhotoUrl,
+        profile_photo_url,
         avatar,
+        role,
+        roleName,
+        role_name,
+        roleId,
+        role_id,
         bankDetails
       } = req.body;
-
-      let photoToUpdate = profilePhotoUrl !== undefined ? profilePhotoUrl : (avatar !== undefined ? avatar : null);
 
       const existing = await query('SELECT * FROM employees WHERE id = ? OR employee_code = ?', [id, id]);
       if (existing.length === 0) {
         return sendError(res, 'Employee not found.', 404);
       }
       const actualEmpId = existing[0].id;
+
+      let photoToUpdate = profilePhotoUrl !== undefined ? profilePhotoUrl : (profile_photo_url !== undefined ? profile_photo_url : (avatar !== undefined ? avatar : null));
 
       // Upload base64 image to Cloudinary if provided
       if (photoToUpdate && cloudinaryService.isBase64Image(photoToUpdate)) {
@@ -304,14 +335,90 @@ class EmployeeController {
         }
       }
 
+      const fName = firstName !== undefined ? firstName : (first_name !== undefined ? first_name : null);
+      const lName = lastName !== undefined ? lastName : (last_name !== undefined ? last_name : null);
+      const targetEmail = email !== undefined && email !== null ? email.trim().toLowerCase() : null;
+      const targetPhone = phone !== undefined && phone !== null ? phone.trim() : null;
+      const targetJobPosition = jobPosition !== undefined ? jobPosition : (position !== undefined ? position : (job_position !== undefined ? job_position : null));
+      const targetGender = gender !== undefined ? gender : null;
+      const targetDateOfBirth = dateOfBirth !== undefined ? dateOfBirth : (date_of_birth !== undefined ? date_of_birth : null);
+      const targetJoiningDate = joiningDate !== undefined ? joiningDate : (joining_date !== undefined ? joining_date : null);
+      const targetStatus = status !== undefined ? (status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : (status.toUpperCase() === 'TERMINATED' ? 'TERMINATED' : 'ACTIVE')) : null;
+
+      // Department resolution
+      let targetDeptId = null;
+      if (departmentId !== undefined && departmentId !== null && !isNaN(Number(departmentId))) {
+        targetDeptId = Number(departmentId);
+      } else if (department_id !== undefined && department_id !== null && !isNaN(Number(department_id))) {
+        targetDeptId = Number(department_id);
+      } else if (department) {
+        const deptStr = String(department).trim().toLowerCase();
+        const depts = await query('SELECT id, name, code FROM departments');
+        const matched = depts.find(d =>
+          d.name.toLowerCase() === deptStr ||
+          deptStr.includes(d.name.toLowerCase()) ||
+          d.name.toLowerCase().includes(deptStr) ||
+          d.code.toLowerCase() === deptStr
+        );
+        if (matched) {
+          targetDeptId = matched.id;
+        } else {
+          try {
+            const [insDept] = await query('INSERT INTO departments (name, code) VALUES (?, ?)', [department, department.slice(0, 4).toUpperCase()]);
+            targetDeptId = insDept.insertId;
+          } catch (e) {
+            targetDeptId = 1;
+          }
+        }
+      }
+
+      // Manager resolution
+      let targetManagerId = undefined; // undefined means preserve existing, null means explicitly clear
+      if (managerId !== undefined) {
+        targetManagerId = managerId !== null && !isNaN(Number(managerId)) ? Number(managerId) : null;
+      } else if (manager_id !== undefined) {
+        targetManagerId = manager_id !== null && !isNaN(Number(manager_id)) ? Number(manager_id) : null;
+      } else if (manager !== undefined) {
+        if (!manager || manager === 'None' || manager === 'null') {
+          targetManagerId = null;
+        } else if (manager === 'Admin User' || manager.toLowerCase().includes('admin')) {
+          const adminEmps = await query('SELECT id FROM employees WHERE id = 1 LIMIT 1');
+          targetManagerId = adminEmps.length > 0 ? adminEmps[0].id : null;
+        } else {
+          const matchedEmps = await query(
+            `SELECT id FROM employees WHERE id != ? AND (CONCAT(first_name, ' ', last_name) LIKE ? OR first_name LIKE ? OR last_name LIKE ?) LIMIT 1`,
+            [actualEmpId, `%${manager}%`, `%${manager}%`, `%${manager}%`]
+          );
+          targetManagerId = matchedEmps.length > 0 ? matchedEmps[0].id : null;
+        }
+      }
+
+      // Working Schedule resolution
+      let targetScheduleId = null;
+      if (workingScheduleId !== undefined && workingScheduleId !== null && !isNaN(Number(workingScheduleId))) {
+        targetScheduleId = Number(workingScheduleId);
+      } else if (working_schedule_id !== undefined && working_schedule_id !== null && !isNaN(Number(working_schedule_id))) {
+        targetScheduleId = Number(working_schedule_id);
+      } else if (schedule) {
+        const schedStr = String(schedule).trim().toLowerCase();
+        const scheds = await query('SELECT id, name, type FROM working_schedules');
+        const matched = scheds.find(s =>
+          s.name.toLowerCase() === schedStr ||
+          schedStr.includes(s.name.toLowerCase()) ||
+          s.name.toLowerCase().includes(schedStr)
+        );
+        targetScheduleId = matched ? matched.id : 1;
+      }
+
       const sql = `
         UPDATE employees SET
           first_name = COALESCE(?, first_name),
           last_name = COALESCE(?, last_name),
+          email = COALESCE(?, email),
           phone = COALESCE(?, phone),
           job_position = COALESCE(?, job_position),
           department_id = COALESCE(?, department_id),
-          manager_id = COALESCE(?, manager_id),
+          manager_id = ${targetManagerId !== undefined ? '?' : 'manager_id'},
           working_schedule_id = COALESCE(?, working_schedule_id),
           gender = COALESCE(?, gender),
           date_of_birth = COALESCE(?, date_of_birth),
@@ -322,21 +429,74 @@ class EmployeeController {
         WHERE id = ?
       `;
 
-      await query(sql, [
-        firstName !== undefined ? firstName : null,
-        lastName !== undefined ? lastName : null,
-        phone !== undefined ? phone : null,
-        jobPosition !== undefined ? jobPosition : null,
-        departmentId !== undefined ? departmentId : null,
-        managerId !== undefined ? managerId : null,
-        workingScheduleId !== undefined ? workingScheduleId : null,
-        gender !== undefined ? gender : null,
-        dateOfBirth !== undefined ? dateOfBirth : null,
-        joiningDate !== undefined ? joiningDate : null,
-        status !== undefined ? status : null,
-        photoToUpdate !== undefined ? photoToUpdate : null,
+      const params = [
+        fName,
+        lName,
+        targetEmail,
+        targetPhone,
+        targetJobPosition,
+        targetDeptId,
+        ...(targetManagerId !== undefined ? [targetManagerId] : []),
+        targetScheduleId,
+        targetGender,
+        targetDateOfBirth,
+        targetJoiningDate,
+        targetStatus,
+        photoToUpdate,
         actualEmpId
-      ]);
+      ];
+
+      await query(sql, params);
+
+      const emailChanged = targetEmail && targetEmail !== existing[0].email;
+
+      // Update linked user account role, email, and active status
+      const targetRole = role !== undefined ? role : (roleName !== undefined ? roleName : (role_name !== undefined ? role_name : (roleId !== undefined ? roleId : (role_id !== undefined ? role_id : null))));
+      let resolvedRoleId = null;
+      if (targetRole) {
+        resolvedRoleId = await authService.resolveRoleId(targetRole);
+      }
+
+      const userEmail = targetEmail || existing[0].email;
+      const linkedUsers = await query('SELECT id, role_id, email FROM users WHERE employee_id = ? OR email = ?', [actualEmpId, existing[0].email]);
+
+      if (linkedUsers.length > 0) {
+        for (const u of linkedUsers) {
+          const updates = ['updated_at = NOW()'];
+          const updateParams = [];
+
+          if (targetEmail) {
+            updates.push('email = ?');
+            updateParams.push(targetEmail);
+          }
+          if (resolvedRoleId) {
+            updates.push('role_id = ?');
+            updateParams.push(resolvedRoleId);
+          }
+          if (targetStatus) {
+            updates.push('is_active = ?');
+            updateParams.push(targetStatus === 'ACTIVE');
+          }
+
+          if (updateParams.length > 0) {
+            updateParams.push(u.id);
+            await query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, updateParams);
+          }
+        }
+      } else if (userEmail) {
+        try {
+          const roleToUse = resolvedRoleId || await authService.resolveRoleId('EMPLOYEE');
+          const tempPassword = authService.generateSecurePassword(12);
+          const passwordHash = await authService.hashPassword(tempPassword);
+          await query(
+            `INSERT INTO users (email, password_hash, role_id, employee_id, is_active, is_verified, must_change_password)
+             VALUES (?, ?, ?, ?, TRUE, FALSE, TRUE)`,
+            [userEmail, passwordHash, roleToUse, actualEmpId]
+          );
+        } catch (uErr) {
+          console.warn('[Employee Update] User account creation warning:', uErr.message);
+        }
+      }
 
       // Update Bank Details if provided
       if (bankDetails && bankDetails.accountNumber && bankDetails.ifscCode) {
@@ -353,7 +513,7 @@ class EmployeeController {
              updated_at = NOW()`,
           [
             actualEmpId,
-            bankDetails.accountHolderName || `${firstName || existing[0].first_name} ${lastName || existing[0].last_name}`,
+            bankDetails.accountHolderName || `${fName || existing[0].first_name} ${lName || existing[0].last_name}`,
             bankDetails.bankName || 'Bank',
             bankDetails.accountNumber.trim(),
             bankDetails.ifscCode.trim().toUpperCase(),
@@ -363,8 +523,47 @@ class EmployeeController {
         );
       }
 
-      // Fetch fresh updated employee
-      const [updatedEmp] = await query('SELECT * FROM employees WHERE id = ?', [actualEmpId]);
+      // Fetch fresh updated employee with joins
+      const [updatedEmp] = await query(`
+        SELECT 
+          e.*,
+          d.name AS department_name,
+          d.code AS department_code,
+          CONCAT(m.first_name, ' ', m.last_name) AS manager_name,
+          ws.name AS schedule_name,
+          ws.weekly_hours AS schedule_weekly_hours,
+          fe.enrollment_status AS face_enrollment_status,
+          fe.enrolled_at AS face_enrolled_at,
+          u.id AS user_id,
+          u.is_active AS user_is_active,
+          r.name AS user_role,
+          r.display_name AS user_role_display
+        FROM employees e
+        LEFT JOIN departments d ON e.department_id = d.id
+        LEFT JOIN employees m ON e.manager_id = m.id
+        LEFT JOIN working_schedules ws ON e.working_schedule_id = ws.id
+        LEFT JOIN face_enrollments fe ON e.id = fe.employee_id
+        LEFT JOIN users u ON e.id = u.employee_id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE e.id = ?
+        LIMIT 1
+      `, [actualEmpId]);
+
+      // Trigger asynchronous email notification to target email
+      if (targetEmail) {
+        sendEmployeeEmailUpdated({
+          name: `${fName || existing[0].first_name} ${lName || existing[0].last_name}`.trim(),
+          oldEmail: existing[0].email,
+          newEmail: targetEmail,
+          employeeCode: existing[0].employee_code,
+          jobPosition: targetJobPosition || existing[0].job_position,
+          departmentName: updatedEmp?.department_name || null
+        }).then((mailRes) => {
+          console.log(`[Employee Update] Email notification delivered to ${targetEmail}:`, mailRes);
+        }).catch((err) => {
+          console.error(`[Employee Update] Email notification error:`, err.message);
+        });
+      }
 
       // Audit Log
       await query(
@@ -375,6 +574,7 @@ class EmployeeController {
 
       return sendSuccess(res, 'Employee profile updated successfully', {
         employee: updatedEmp || null,
+        ...updatedEmp,
         profilePhotoUrl: photoToUpdate || (updatedEmp ? updatedEmp.profile_photo_url : null),
         avatar: photoToUpdate || (updatedEmp ? updatedEmp.profile_photo_url : null)
       });
@@ -391,23 +591,51 @@ class EmployeeController {
     try {
       const { id } = req.params;
 
-      const existing = await query('SELECT * FROM employees WHERE id = ?', [id]);
+      const existing = await query('SELECT * FROM employees WHERE id = ? OR employee_code = ?', [id, id]);
       if (existing.length === 0) {
         return sendError(res, 'Employee not found.', 404);
       }
+      const actualEmpId = existing[0].id;
 
-      // Soft delete by updating status to TERMINATED
-      await query('UPDATE employees SET status = "TERMINATED", updated_at = NOW() WHERE id = ?', [id]);
-      await query('UPDATE users SET is_active = FALSE WHERE employee_id = ?', [id]);
+      // Safety protection for primary Administrator
+      if (actualEmpId === 1) {
+        return sendError(res, 'Safety lock: System Administrator employee profile cannot be deleted.', 400);
+      }
+
+      // Unlink manager references in departments and other employees
+      await query('UPDATE departments SET manager_id = NULL WHERE manager_id = ?', [actualEmpId]);
+      await query('UPDATE employees SET manager_id = NULL WHERE manager_id = ?', [actualEmpId]);
+
+      // Delete linked user account and verification tokens
+      const linkedUsers = await query('SELECT id FROM users WHERE employee_id = ?', [actualEmpId]);
+      for (const u of linkedUsers) {
+        await query('DELETE FROM email_verification_tokens WHERE user_id = ?', [u.id]);
+        await query('DELETE FROM password_reset_tokens WHERE user_id = ?', [u.id]);
+        await query('DELETE FROM audit_logs WHERE user_id = ?', [u.id]);
+        await query('DELETE FROM users WHERE id = ?', [u.id]);
+      }
+
+      // Delete child records cleanly
+      await query('DELETE FROM employee_bank_details WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM face_enrollments WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM face_verification_logs WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM time_off_allocations WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM time_off_requests WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM attendance WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM contracts WHERE employee_id = ?', [actualEmpId]);
+      await query('DELETE FROM payslips WHERE employee_id = ?', [actualEmpId]);
+
+      // Delete employee record
+      await query('DELETE FROM employees WHERE id = ?', [actualEmpId]);
 
       // Audit Log
       await query(
         `INSERT INTO audit_logs (user_id, action, module, record_id, description, ip_address, user_agent)
-         VALUES (?, 'EMPLOYEE_TERMINATED', 'Employees', ?, 'Employee marked terminated and user deactivated', ?, ?)`,
-        [req.user.id, String(id), req.ip, req.headers['user-agent'] || '']
+         VALUES (?, 'EMPLOYEE_DELETED', 'Employees', ?, 'Admin deleted employee profile and linked records', ?, ?)`,
+        [req.user.id, String(actualEmpId), req.ip, req.headers['user-agent'] || '']
       );
 
-      return sendSuccess(res, 'Employee status updated to Terminated and user access deactivated.');
+      return sendSuccess(res, 'Employee deleted successfully.');
     } catch (error) {
       next(error);
     }

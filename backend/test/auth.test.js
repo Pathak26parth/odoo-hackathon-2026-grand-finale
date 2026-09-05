@@ -214,6 +214,11 @@ async function runTests() {
     // -----------------------------------------------------------------
     console.log('\n--- TEST GROUP 5: ATTENDANCE & BIOMETRIC FACE VERIFICATION ---');
 
+    // Verify Python Face Service Health
+    const faceService = require('../src/services/faceVerificationService');
+    const pyHealth = await faceService.checkPythonHealth();
+    assert(pyHealth.online === true, 'Python Face AI microservice is online and healthy on port 8000');
+
     // Face enrollment status
     const faceStatus = await request('/api/attendance/face/status', {
       headers: { Authorization: `Bearer ${empToken}` }
@@ -227,6 +232,27 @@ async function runTests() {
       body: { faceInput: 'live_webcam_frame_data_hash' }
     });
     assert(faceCheckIn.status === 201 || faceCheckIn.status === 400, 'Face check-in endpoint handles verification & punch logic');
+
+    // Security Boundary: Employee attempts to face check-in for another employee (e.g. employeeId: 1)
+    const unauthorizedFaceCheck = await request('/api/attendance/face-check-in', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: {
+        employeeId: 1,
+        faceInput: 'live_webcam_frame_data_hash'
+      }
+    });
+    assert(unauthorizedFaceCheck.status === 403, 'Employee strictly blocked from face check-in for another employee (403 Forbidden)');
+
+    // Security Boundary: Employee attempts to manual check-in for another employee (e.g. employeeId: 1)
+    const unauthorizedCheckIn = await request('/api/attendance/check-in', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${empToken}` },
+      body: {
+        employeeId: 1
+      }
+    });
+    assert(unauthorizedCheckIn.status === 403, 'Employee strictly blocked from manual check-in for another employee (403 Forbidden)');
 
     // -----------------------------------------------------------------
     // TEST 6: Time Off Allocation & Approvals

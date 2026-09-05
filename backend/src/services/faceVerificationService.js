@@ -3,6 +3,7 @@ const { query } = require('../config/db');
 const env = require('../config/env');
 const STATUSES = require('../constants/statuses');
 const cloudinaryService = require('./cloudinaryService');
+const aiProcessManager = require('./aiProcessManager');
 
 /**
  * Biometric Face Verification Service
@@ -221,6 +222,10 @@ class FaceVerificationService {
     let failureMsg = 'Face identity verification failed. Face does not match registered profile photo.';
 
     // 2. Validate input image payload
+    if (faceInput && typeof faceInput === 'object') {
+      faceInput = faceInput.dataUrl || faceInput.frame || faceInput.image || faceInput.url || null;
+    }
+
     if (!faceInput || typeof faceInput !== 'string' || (!faceInput.startsWith('data:image') && !faceInput.startsWith('http') && !faceInput.endsWith('.jpg') && !faceInput.endsWith('.png'))) {
       await this.logVerification({
         employeeId: actualEmpId,
@@ -241,13 +246,12 @@ class FaceVerificationService {
     }
 
     // 3. Call Python InsightFace / ArcFace Microservice
-    try {
+    const sendAttendanceRequest = async () => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
       const registeredImg = enrollment.profile_photo_url || faceInput;
 
-      const pyResponse = await fetch(`${env.FACE_SERVICE_URL}/api/face/attendance`, {
+      const res = await fetch(`${env.FACE_SERVICE_URL}/api/face/attendance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -258,8 +262,23 @@ class FaceVerificationService {
         }),
         signal: controller.signal
       });
-
       clearTimeout(timeoutId);
+      return res;
+    };
+
+    try {
+      let pyResponse;
+      try {
+        pyResponse = await sendAttendanceRequest();
+      } catch (firstErr) {
+        // Attempt to auto-wake Python service if offline
+        const isUp = await aiProcessManager.ensureAiService();
+        if (isUp) {
+          pyResponse = await sendAttendanceRequest();
+        } else {
+          throw firstErr;
+        }
+      }
 
       const pyResult = await pyResponse.json().catch(() => ({}));
 
@@ -305,7 +324,7 @@ class FaceVerificationService {
       };
     }
 
-    if (!matchSuccess || similarityScore < 0.45) {
+    if (!matchSuccess || similarityScore < 0.40) {
       await this.logVerification({
         employeeId: actualEmpId,
         verificationType,

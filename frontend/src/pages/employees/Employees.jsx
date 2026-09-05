@@ -8,9 +8,10 @@ import {
   Briefcase,
   Users,
   Info,
-  ArrowUpRight
+  ArrowUpRight,
+  Trash2
 } from 'lucide-react';
-import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
+import { getEmployees, fetchEmployeesAsync, deleteEmployee } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SearchInput } from '../../components/common/SearchInput';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -48,6 +49,24 @@ export const Employees = () => {
 
   const handleCardClick = (emp) => {
     navigate(`/employees/${emp.id}`);
+  };
+
+  const handleDeleteEmployee = async (e, emp) => {
+    e.stopPropagation();
+    const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.employeeId || 'this employee';
+    if (!window.confirm(`Are you sure you want to delete ${empName} (${emp.employeeId})?\n\nThis will permanently remove the employee record, linked user account, contracts, and attendance history.`)) {
+      return;
+    }
+
+    try {
+      await deleteEmployee(emp.id);
+      setEmployees((prev) => prev.filter((item) => String(item.id) !== String(emp.id)));
+      fetchEmployeesAsync().then((list) => {
+        if (Array.isArray(list)) setEmployees(list);
+      }).catch(console.error);
+    } catch (err) {
+      alert('Error deleting employee: ' + err.message);
+    }
   };
 
   // Filtered dataset
@@ -115,6 +134,25 @@ export const Employees = () => {
       )
     },
     {
+      header: 'System Role',
+      key: 'role',
+      render: (row) => {
+        const r = (row.role || row.userRole || row.user_role || 'EMPLOYEE').toUpperCase();
+        switch (r) {
+          case 'ADMIN':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
+          case 'HR_MANAGER':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">HR Manager</span>;
+          case 'HR_PAYROLL_ADMIN':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">Payroll Admin</span>;
+          case 'HR_PAYROLL_USER':
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">Payroll User</span>;
+          default:
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">Employee</span>;
+        }
+      }
+    },
+    {
       header: 'Manager',
       key: 'manager',
       render: (row) => row.manager || row.managerName || 'None',
@@ -131,12 +169,23 @@ export const Employees = () => {
       key: 'action',
       align: 'right',
       render: (row) => (
-        <button
-          onClick={() => navigate(`/employees/${row.id}`)}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
-        >
-          View
-        </button>
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            onClick={() => navigate(`/employees/${row.id}`)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
+          >
+            View
+          </button>
+          {isHRorAdmin && (
+            <button
+              onClick={(e) => handleDeleteEmployee(e, row)}
+              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+              title="Delete Employee"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       )
     }
   ];
@@ -273,13 +322,43 @@ export const Employees = () => {
                       alt={name}
                       className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-2xs"
                     />
-                    <StatusBadge status={status} />
+                    <div className="flex items-center gap-1">
+                      <StatusBadge status={status} />
+                      {isHRorAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteEmployee(e, emp)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          title="Delete Employee"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm truncate">
                     {name}
                   </h3>
-                  <p className="text-slate-600 font-medium truncate mt-0.5">{position}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-slate-600 font-medium truncate">{position}</span>
+                    <span className="text-slate-300">•</span>
+                    {(() => {
+                      const r = (emp.role || emp.userRole || emp.user_role || 'EMPLOYEE').toUpperCase();
+                      switch (r) {
+                        case 'ADMIN':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">Admin</span>;
+                        case 'HR_MANAGER':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">HR Manager</span>;
+                        case 'HR_PAYROLL_ADMIN':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200">Payroll Admin</span>;
+                        case 'HR_PAYROLL_USER':
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">Payroll User</span>;
+                        default:
+                          return <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 border border-slate-200">Employee</span>;
+                      }
+                    })()}
+                  </div>
 
                   <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-slate-500 text-[11px]">
                     <p className="flex items-center gap-1.5">

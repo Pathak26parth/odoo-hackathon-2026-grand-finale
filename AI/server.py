@@ -35,24 +35,31 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 import urllib.request
 import urllib.parse
+import hashlib
+
+CACHE_DIR = ROOT_DIR / ".cache"
+CACHE_DIR.mkdir(exist_ok=True)
 
 def _save_temp_image(data_str: str) -> str:
-    """Save base64 image data, download URL, or return path if already a filepath."""
+    """Save base64 image data, download URL with disk caching, or return path if already a filepath."""
     if not data_str:
         raise ValueError("Image data is empty")
     
     if os.path.exists(data_str):
         return data_str
 
-    # If HTTP/HTTPS URL, download into a temporary file
+    # If HTTP/HTTPS URL, download into a persistent disk cache
     if data_str.startswith("http://") or data_str.startswith("https://"):
+        url_hash = hashlib.md5(data_str.encode("utf-8")).hexdigest()
+        cached_file = CACHE_DIR / f"{url_hash}.jpg"
+        if cached_file.exists() and cached_file.stat().st_size > 100:
+            return str(cached_file)
+
         req = urllib.request.Request(data_str, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             raw_bytes = resp.read()
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-        temp_file.write(raw_bytes)
-        temp_file.close()
-        return temp_file.name
+        cached_file.write_bytes(raw_bytes)
+        return str(cached_file)
     
     # Strip data URL header if present (e.g. data:image/jpeg;base64,...)
     clean_data = data_str
@@ -163,6 +170,27 @@ class FaceRequestHandler(BaseHTTPRequestHandler):
                     threshold=threshold
                 )
                 return self._send_json(200, result)
+
+            elif parsed.path in ["/enroll", "/api/face/enroll"]:
+                image_input = body.get("image") or body.get("imageInput") or body.get("faceInput") or body.get("faceEmbeddingOrImage")
+                emp_id = body.get("employee_id") or body.get("employeeId")
+                img_path = _save_temp_image(image_input)
+                temp_files_to_clean.append(img_path)
+                
+                det_result = service.detect_faces(img_path)
+                faces_count = det_result.get("data", {}).get("faces_detected", 0)
+                if faces_count == 0:
+                    return self._send_json(400, {
+                        "success": False,
+                        "message": "No face detected in enrollment image. Please ensure adequate lighting and face is centered."
+                    })
+                
+                return self._send_json(200, {
+                    "success": True,
+                    "message": "Face profile enrolled and validated successfully.",
+                    "employee_id": emp_id,
+                    "faces_detected": faces_count
+                })
 
             elif parsed.path in ["/liveness", "/api/face/liveness"]:
                 video_input = body.get("video") or body.get("video_input", 0)

@@ -32,6 +32,9 @@ export function normalizeEmployee(emp) {
     gender: emp.gender || 'OTHER',
     dateOfBirth: emp.date_of_birth ? emp.date_of_birth.split('T')[0] : '',
     joiningDate: emp.joining_date ? emp.joining_date.split('T')[0] : '',
+    role: emp.user_role || emp.role || emp.roleName || emp.role_name || emp.user_role_display || 'EMPLOYEE',
+    roleDisplayName: emp.user_role_display || (emp.user_role === 'HR_MANAGER' ? 'HR Manager' : (emp.user_role === 'HR_PAYROLL_ADMIN' ? 'HR Payroll Admin' : (emp.user_role === 'HR_PAYROLL_USER' ? 'HR Payroll User' : (emp.user_role === 'ADMIN' ? 'Admin' : 'Employee')))),
+    userRole: emp.user_role || emp.role || 'EMPLOYEE',
     faceEnrollmentStatus: emp.face_enrollment_status || emp.faceEnrollmentStatus || 'NOT_ENROLLED',
     contractsCount: emp.metrics?.contractsCount || emp.contractsCount || 0,
     attendanceCount: emp.metrics?.attendanceCount || emp.attendanceCount || 0,
@@ -81,7 +84,8 @@ export const employeeService = {
       dateOfBirth: payload.dateOfBirth || null,
       joiningDate: payload.joiningDate || new Date().toISOString().split('T')[0],
       profilePhotoUrl: payload.avatar || payload.profilePhotoUrl || null,
-      roleName: payload.role || 'EMPLOYEE',
+      role: payload.role || payload.roleName || 'EMPLOYEE',
+      roleName: payload.role || payload.roleName || 'EMPLOYEE',
       bankDetails: payload.bankDetails || null,
       initialContract: payload.initialContract || (payload.wage ? { wage: payload.wage, salaryStructureId: 1 } : null)
     };
@@ -94,21 +98,30 @@ export const employeeService = {
     const body = {
       firstName: payload.firstName,
       lastName: payload.lastName,
+      email: payload.email,
       phone: payload.phone,
+      position: payload.position || payload.jobPosition,
       jobPosition: payload.position || payload.jobPosition,
+      department: payload.department,
       departmentId: payload.departmentId ? Number(payload.departmentId) : undefined,
+      manager: payload.manager,
       managerId: payload.managerId ? Number(payload.managerId) : undefined,
+      schedule: payload.schedule,
       workingScheduleId: payload.workingScheduleId ? Number(payload.workingScheduleId) : undefined,
       gender: payload.gender,
       dateOfBirth: payload.dateOfBirth,
       joiningDate: payload.joiningDate,
       status: payload.status ? payload.status.toUpperCase() : undefined,
+      avatar: payload.avatar || payload.profilePhotoUrl,
       profilePhotoUrl: payload.avatar || payload.profilePhotoUrl,
+      role: payload.role || payload.roleName,
+      roleName: payload.role || payload.roleName,
       bankDetails: payload.bankDetails
     };
 
     const res = await api.put(`/employees/${id}`, body);
-    return res;
+    const empData = res?.data?.employee || res?.data || res;
+    return normalizeEmployee(empData);
   },
 
   async deleteEmployee(id) {

@@ -1,13 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
-import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2 } from 'lucide-react';
-import { getEmployeeById, createEmployee, updateEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
+import { ArrowLeft, Save, Edit3, Check, AlertCircle, User, Briefcase, Camera, Upload, Trash2, Shield } from 'lucide-react';
+import { getEmployeeById, createEmployee, updateEmployee, deleteEmployee, getEmployees, fetchEmployeesAsync, fetchEmployeeByIdAsync } from '../../data/employees';
 import { PageHeader } from '../../components/common/PageHeader';
 import { EmployeeSmartActions } from '../../components/employees/EmployeeSmartActions';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useAuth } from '../../context/AuthContext';
 
 const DEFAULT_PHOTO = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
+
+const SYSTEM_ROLES = [
+  {
+    value: 'EMPLOYEE',
+    label: 'Employee (Self-Service Portal)',
+    panel: 'Employee Portal',
+    badge: 'bg-slate-100 text-slate-700 border-slate-200',
+    desc: 'Standard employee portal access: Profile, attendance check-in/out, leave requests, and payslips.'
+  },
+  {
+    value: 'HR_MANAGER',
+    label: 'HR Manager (Personnel & HR Operations Panel)',
+    panel: 'HR Operations Panel',
+    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    desc: 'Full HR Operations: Employee master, attendance oversight, time off approvals, and contracts.'
+  },
+  {
+    value: 'HR_PAYROLL_ADMIN',
+    label: 'HR & Payroll Administrator (Full HR & Payroll Panel)',
+    panel: 'HR & Payroll Panel',
+    badge: 'bg-blue-50 text-blue-700 border-blue-200',
+    desc: 'Complete HR & Payroll control: Payruns, payslip computation, salary structures, rules, and personnel.'
+  },
+  {
+    value: 'HR_PAYROLL_USER',
+    label: 'HR Payroll User (Payrun Processing Panel)',
+    panel: 'Payroll Processing Panel',
+    badge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    desc: 'Payroll processing: Create/compute payruns, generate payslips, and manage attendance.'
+  },
+  {
+    value: 'ADMIN',
+    label: 'System Administrator (Full Platform Access)',
+    panel: 'All Panels (Full Access)',
+    badge: 'bg-purple-50 text-purple-700 border-purple-200',
+    desc: 'Unrestricted master access: All functional areas, user management, audit logs, and settings.'
+  }
+];
 
 export const EmployeeDetail = () => {
   const { id } = useParams();
@@ -29,6 +67,7 @@ export const EmployeeDetail = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -37,7 +76,8 @@ export const EmployeeDetail = () => {
     email: '',
     phone: '',
     avatar: DEFAULT_PHOTO,
-    department: 'Engineering',
+    role: 'EMPLOYEE',
+    department: 'Engineering & Technology',
     manager: 'None',
     position: '',
     schedule: 'Standard 40 Hours',
@@ -84,6 +124,7 @@ export const EmployeeDetail = () => {
   };
 
   const populateForm = (existing) => {
+    if (!existing) return;
     setEmployee(existing);
     const resolvedPhoto = existing.profilePhotoUrl || existing.profile_photo_url || existing.avatar || DEFAULT_PHOTO;
     setFormData({
@@ -94,11 +135,12 @@ export const EmployeeDetail = () => {
       phone: existing.phone || '',
       avatar: resolvedPhoto,
       profilePhotoUrl: resolvedPhoto,
-      department: existing.department || existing.department_name || '',
+      role: existing.role || existing.user_role || existing.roleName || existing.userRole || 'EMPLOYEE',
+      department: existing.department || existing.department_name || 'Engineering & Technology',
       manager: existing.manager || existing.manager_name || 'None',
       position: existing.position || existing.job_position || '',
-      schedule: existing.schedule || existing.schedule_name || 'Standard 40 Hours',
-      status: existing.status || (existing.is_active ? 'Active' : 'Inactive')
+      schedule: existing.schedule || existing.schedule_name || 'Standard Full-Time (40h/week)',
+      status: (existing.status || 'Active').toUpperCase() === 'ACTIVE' ? 'Active' : (existing.status || 'Inactive')
     });
   };
 
@@ -152,25 +194,23 @@ export const EmployeeDetail = () => {
     try {
       if (isCreate) {
         const created = await createEmployee(formData);
-        const newUrl = created?.data?.profilePhotoUrl || created?.profilePhotoUrl;
+        const newUrl = created?.data?.profilePhotoUrl || created?.profilePhotoUrl || created?.avatar;
         if (newUrl) {
           setFormData((prev) => ({ ...prev, avatar: newUrl, profilePhotoUrl: newUrl }));
         }
-        setToastMessage('Employee created and photo saved to Cloudinary successfully!');
+        setToastMessage('Employee created and saved successfully!');
       } else {
         const updated = await updateEmployee(id, formData);
-        const newUrl = updated?.data?.profilePhotoUrl || updated?.profilePhotoUrl;
-        if (newUrl) {
-          setFormData((prev) => ({ ...prev, avatar: newUrl, profilePhotoUrl: newUrl }));
+        if (updated) {
+          populateForm(updated);
         }
-        setToastMessage('Employee details and photo updated in Cloudinary successfully!');
+        setToastMessage('Employee details updated successfully!');
       }
 
       setTimeout(() => {
-        if (isEmployeeOnly) {
-          setIsEditing(false);
-          setSubmitting(false);
-        } else {
+        setIsEditing(false);
+        setSubmitting(false);
+        if (!isEmployeeOnly) {
           navigate('/employees');
         }
       }, 900);
@@ -180,8 +220,46 @@ export const EmployeeDetail = () => {
     }
   };
 
-  const departments = ['Engineering', 'Human Resources', 'Finance', 'Sales', 'Design', 'Operations'];
-  const schedules = ['Standard 40 Hours', 'Flexible Schedule', 'Part Time', 'Night Shift'];
+  const handleDeleteEmployee = async () => {
+    const empName = `${formData.firstName} ${formData.lastName}`.trim() || formData.employeeId || 'this employee';
+    if (!window.confirm(`Are you sure you want to delete ${empName} (${formData.employeeId})?\n\nThis will permanently delete the employee profile, associated user account, contracts, and attendance records.`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteEmployee(id);
+      setToastMessage('Employee deleted successfully.');
+      setTimeout(() => {
+        navigate('/employees');
+      }, 700);
+    } catch (err) {
+      alert('Error deleting employee: ' + err.message);
+      setDeleting(false);
+    }
+  };
+
+  const departments = [
+    'Engineering & Technology',
+    'Engineering',
+    'Human Resources',
+    'Finance & Payroll Operations',
+    'Finance',
+    'Marketing & Growth',
+    'Sales',
+    'Design & UX',
+    'Design',
+    'Operations'
+  ];
+  const schedules = [
+    'Standard Full-Time (40h/week)',
+    'Standard 40 Hours',
+    'Operations Shift (48h/week)',
+    'Flexible Schedule',
+    'Part Time',
+    'Night Shift (40h/week)',
+    'Night Shift'
+  ];
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
@@ -218,11 +296,24 @@ export const EmployeeDetail = () => {
             <button
               type="submit"
               form="employee-form"
-              disabled={submitting}
+              disabled={submitting || deleting}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
             >
               <Save className={`w-3.5 h-3.5 ${submitting ? 'animate-spin' : ''}`} />
               {submitting ? 'Uploading & Saving...' : isCreate ? 'Save Employee' : 'Update Employee'}
+            </button>
+          )}
+
+          {!isCreate && isHRorAdmin && (
+            <button
+              type="button"
+              onClick={handleDeleteEmployee}
+              disabled={deleting || submitting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 rounded-lg shadow-2xs transition-colors disabled:opacity-50"
+              title="Delete Employee"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {deleting ? 'Deleting...' : 'Delete Employee'}
             </button>
           )}
 
@@ -508,6 +599,38 @@ export const EmployeeDetail = () => {
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
               </select>
+            </div>
+
+            <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+              <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-blue-700">
+                  <Shield className="w-4 h-4 text-blue-600" />
+                  System Access & Role Panel <span className="text-rose-500">*</span>
+                </span>
+                <span className="text-[11px] text-blue-600 font-medium">Controls which dashboard panel this person can access</span>
+              </label>
+              <select
+                disabled={!isEditing || isEmployeeOnly}
+                value={formData.role || 'EMPLOYEE'}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                className="w-full px-3 py-2.5 border border-blue-200 bg-blue-50/30 rounded-lg text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-600"
+              >
+                {SYSTEM_ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                  SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  Panel: {SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.panel}
+                </span>
+                <p className="text-[11px] text-slate-500">
+                  {SYSTEM_ROLES.find((r) => r.value === (formData.role || 'EMPLOYEE'))?.desc}
+                </p>
+              </div>
             </div>
           </div>
         </div>
