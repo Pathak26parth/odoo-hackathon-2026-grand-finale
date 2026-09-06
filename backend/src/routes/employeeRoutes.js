@@ -20,6 +20,7 @@ router.put('/:id', requireAuth, (req, res, next) => {
     req.user.role === 'ADMIN' ||
     req.user.role === 'HR_MANAGER' ||
     req.user.role === 'HR_PAYROLL_ADMIN' ||
+    req.user.role === 'HR_PAYROLL_USER' ||
     req.user.permissions?.includes(PERMISSIONS.EMPLOYEES_UPDATE) ||
     (req.user.employeeId && (String(req.user.employeeId) === String(req.params.id) || req.user.employeeCode === req.params.id))
   ) {
@@ -32,6 +33,7 @@ router.delete('/:id', requireAuth, (req, res, next) => {
     req.user.role === 'ADMIN' ||
     req.user.role === 'HR_MANAGER' ||
     req.user.role === 'HR_PAYROLL_ADMIN' ||
+    req.user.role === 'HR_PAYROLL_USER' ||
     req.user.permissions?.includes(PERMISSIONS.EMPLOYEES_DELETE)
   ) {
     return employeeController.deleteEmployee(req, res, next);

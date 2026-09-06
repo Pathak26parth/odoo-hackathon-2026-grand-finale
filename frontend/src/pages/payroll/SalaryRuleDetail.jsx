@@ -45,7 +45,7 @@ export const SalaryRuleDetail = () => {
     load();
   }, [id, isCreate, navigate]);
 
-  if (!hasAccess) {
+  if (!hasAccess || (isCreate && !canManage)) {
     return (
       <div className="bg-white rounded-xl border border-rose-200 p-8 text-center max-w-lg mx-auto mt-12 space-y-3">
         <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
@@ -53,13 +53,26 @@ export const SalaryRuleDetail = () => {
         </div>
         <h3 className="text-sm font-bold text-slate-900">Access Restricted</h3>
         <p className="text-xs text-slate-500">
-          Your role ({role}) does not have permission to access Payroll Salary Rules.
+          {!hasAccess
+            ? `Your role (${role}) does not have permission to access Payroll Salary Rules.`
+            : `Your role (${role}) has read-only access to Salary Rules and cannot create new rules.`}
         </p>
+        <button
+          type="button"
+          onClick={() => navigate('/payroll/salary-rules')}
+          className="mt-2 px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
+        >
+          Back to Rules
+        </button>
       </div>
     );
   }
 
   const handleSubmit = async (data) => {
+    if (!canManage) {
+      alert('Read-only access: You cannot modify salary rules.');
+      return;
+    }
     try {
       if (isCreate) {
         await createSalaryRule(data);
@@ -93,7 +106,7 @@ export const SalaryRuleDetail = () => {
         subtitle={
           isCreate
             ? 'Define computation formulas, percentages, or fixed values'
-            : `${ruleData?.name} [${ruleData?.code}] (${ruleData?.category})`
+            : `${ruleData?.name} [${ruleData?.code}] (${ruleData?.category})${!canManage ? ' • Read-Only Mode' : ''}`
         }
       >
         <button

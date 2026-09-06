@@ -49,7 +49,7 @@ export const SalaryStructureDetail = () => {
     load();
   }, [id, isCreate, navigate]);
 
-  if (!hasAccess) {
+  if (!hasAccess || (isCreate && !canManage)) {
     return (
       <div className="bg-white rounded-xl border border-rose-200 p-8 text-center max-w-lg mx-auto mt-12 space-y-3">
         <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
@@ -57,13 +57,26 @@ export const SalaryStructureDetail = () => {
         </div>
         <h3 className="text-sm font-bold text-slate-900">Access Restricted</h3>
         <p className="text-xs text-slate-500">
-          Your role ({role}) does not have permission to access Payroll Salary Structures.
+          {!hasAccess
+            ? `Your role (${role}) does not have permission to access Payroll Salary Structures.`
+            : `Your role (${role}) has read-only access to Salary Structures and cannot create new structures.`}
         </p>
+        <button
+          type="button"
+          onClick={() => navigate('/payroll/salary-structures')}
+          className="mt-2 px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
+        >
+          Back to Structures
+        </button>
       </div>
     );
   }
 
   const handleSubmit = async (data) => {
+    if (!canManage) {
+      alert('Read-only access: You cannot modify salary structures.');
+      return;
+    }
     try {
       if (isCreate) {
         await createSalaryStructure(data);
@@ -97,7 +110,7 @@ export const SalaryStructureDetail = () => {
         subtitle={
           isCreate
             ? 'Define salary rule packages and sequential execution flows'
-            : `${structure?.name} (${structure?.ruleCount || structure?.ruleIds?.length || 0} Rules attached)`
+            : `${structure?.name} (${structure?.ruleCount || structure?.ruleIds?.length || 0} Rules attached)${!canManage ? ' • Read-Only Mode' : ''}`
         }
       >
         <button

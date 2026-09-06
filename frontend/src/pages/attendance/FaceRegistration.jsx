@@ -27,9 +27,11 @@ export const FaceRegistration = () => {
     currentUser?.role === 'Admin' ||
     currentUser?.role === 'HR Manager' ||
     currentUser?.role === 'HR Payroll Manager' ||
+    currentUser?.role === 'HR Payroll User' ||
     currentUser?.roleRaw === 'ADMIN' ||
     currentUser?.roleRaw === 'HR_MANAGER' ||
-    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_USER';
 
   const selfId = String(currentUser?.internalEmployeeId || currentUser?.id || '1');
   const selfCode =
@@ -67,9 +69,11 @@ export const FaceRegistration = () => {
         currentUser?.role === 'Admin' ||
         currentUser?.role === 'HR Manager' ||
         currentUser?.role === 'HR Payroll Manager' ||
+        currentUser?.role === 'HR Payroll User' ||
         currentUser?.roleRaw === 'ADMIN' ||
         currentUser?.roleRaw === 'HR_MANAGER' ||
-        currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+        currentUser?.roleRaw === 'HR_PAYROLL_ADMIN' ||
+        currentUser?.roleRaw === 'HR_PAYROLL_USER';
 
       if (!isPrivileged) {
         const selfObj = {

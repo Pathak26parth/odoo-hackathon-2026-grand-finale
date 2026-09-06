@@ -14,7 +14,8 @@ class AttendanceController {
     const isPrivileged =
       req.user.role === 'ADMIN' ||
       req.user.role === 'HR_MANAGER' ||
-      req.user.role === 'HR_PAYROLL_ADMIN';
+      req.user.role === 'HR_PAYROLL_ADMIN' ||
+      req.user.role === 'HR_PAYROLL_USER';
 
     // If privileged admin/manager and specifically provided an employeeId, resolve that employee
     if (isPrivileged && employeeIdFromBody) {
