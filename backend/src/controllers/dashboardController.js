@@ -223,6 +223,47 @@ class DashboardController {
             salaryGrowthFormatted = '+100%';
           }
         }
+      } else {
+        // When All Periods is selected, dynamically calculate growth between the 2 most recent periods
+        let recentMonthSql = `
+          SELECT 
+            DATE_FORMAT(p.period_start, '%Y-%m') AS m_key,
+            COALESCE(SUM(p.net_amount), 0) AS net_sum
+          FROM payslips p
+          JOIN employees e ON p.employee_id = e.id
+          LEFT JOIN working_schedules ws ON e.working_schedule_id = ws.id
+          WHERE 1=1
+        `;
+        const recentMonthParams = [];
+        if (deptFilterId) {
+          recentMonthSql += ' AND e.department_id = ?';
+          recentMonthParams.push(deptFilterId);
+        }
+        if (scheduleTypeFilter) {
+          if (scheduleTypeFilter === 'Full-Time') {
+            recentMonthSql += ' AND (ws.type = "STANDARD_40H" OR ws.type = "SHIFT_BASED")';
+          } else if (scheduleTypeFilter === 'Contractor') {
+            recentMonthSql += ' AND (ws.type = "PART_TIME" OR ws.type = "FLEXIBLE" OR e.job_position LIKE "%Contract%")';
+          } else {
+            recentMonthSql += ' AND (ws.type = ? OR ws.name = ?)';
+            recentMonthParams.push(scheduleTypeFilter, scheduleTypeFilter);
+          }
+        }
+        recentMonthSql += `
+          GROUP BY DATE_FORMAT(p.period_start, '%Y-%m')
+          ORDER BY m_key DESC
+          LIMIT 2
+        `;
+        const recentMonths = await query(recentMonthSql, recentMonthParams);
+        if (recentMonths && Array.isArray(recentMonths) && recentMonths.length >= 2) {
+          const latestNet = parseFloat(recentMonths[0].net_sum) || 0;
+          const priorNet = parseFloat(recentMonths[1].net_sum) || 0;
+          if (priorNet > 0) {
+            const growthVal = ((latestNet - priorNet) / priorNet) * 100;
+            salaryGrowth = parseFloat(growthVal.toFixed(1));
+            salaryGrowthFormatted = `${growthVal >= 0 ? '+' : ''}${growthVal.toFixed(1)}%`;
+          }
+        }
       }
 
       // Approved Time Off KPI

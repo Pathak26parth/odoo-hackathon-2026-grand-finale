@@ -278,7 +278,7 @@ export const Dashboard = () => {
         <MetricCard
           label="Average Salary"
           value={formatCurrency(avgSalary)}
-          subtext="Contract base wage"
+          subtext={payslipsCount > 0 ? "Average net per payslip" : "Contract base wage"}
           icon={TrendingUp}
           color="text-indigo-700"
           bgColor="bg-indigo-50"
