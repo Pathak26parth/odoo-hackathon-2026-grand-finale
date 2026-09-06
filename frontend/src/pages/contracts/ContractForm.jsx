@@ -19,6 +19,26 @@ export const ContractForm = () => {
   const { currentUser } = useAuth();
   const isCreate = !id || id === 'new';
 
+  const [employees, setEmployees] = useState([]);
+  const [availableStructures, setAvailableStructures] = useState([]);
+  const [toastMessage, setToastMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [overlapWarning, setOverlapWarning] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  const [formData, setFormData] = useState({
+    employeeId: '',
+    employeeName: '',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+    department: '',
+    position: '',
+    wage: '',
+    salaryStructure: '',
+    status: 'Active',
+    notes: ''
+  });
+
   const isManagerOrAdmin =
     currentUser?.role === 'Admin' ||
     currentUser?.role === 'HR Manager' ||
@@ -46,27 +66,6 @@ export const ContractForm = () => {
   // Security Lock: Only System Admin can edit System Admin's contract
   const isContractLocked = !isCreate && isSystemAdminContract && !isCurrentUserSystemAdmin;
   const isReadOnly = isEmployeeOnly || isContractLocked;
-
-  const [employees, setEmployees] = useState([]);
-  const [availableStructures, setAvailableStructures] = useState([]);
-  const [toastMessage, setToastMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [overlapWarning, setOverlapWarning] = useState(null);
-
-  const [formData, setFormData] = useState({
-    employeeId: '',
-    employeeName: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: '',
-    department: '',
-    position: '',
-    wage: '',
-    salaryStructure: '',
-    status: 'Active',
-    notes: ''
-  });
-
-  const [errors, setErrors] = useState({});
 
   const populateForm = (existing) => {
     setFormData({
