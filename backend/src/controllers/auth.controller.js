@@ -1,10 +1,11 @@
+
 const { query, transaction } = require('../config/db');
 const { hashPassword, comparePassword } = require('../utils/password.utils');
-const { 
-  generateAccessToken, 
-  generateRefreshToken, 
-  verifyRefreshToken, 
-  hashToken 
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  hashToken
 } = require('../utils/jwt.utils');
 
 /**
