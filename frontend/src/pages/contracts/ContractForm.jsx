@@ -30,6 +30,23 @@ export const ContractForm = () => {
     currentUser?.roleRaw === 'HR_PAYROLL_USER';
   const isEmployeeOnly = !isManagerOrAdmin;
 
+  const isSystemAdminContract =
+    formData.employeeName === 'System Administrator' ||
+    formData.employeeId === 'EMP-001' ||
+    formData.employeeId === 1 ||
+    formData.employeeId === '1' ||
+    formData.internalEmployeeId === 1 ||
+    String(id) === '1' ||
+    id === 'CON-EMP-001-2024';
+
+  const isCurrentUserSystemAdmin =
+    currentUser?.role === 'Admin' ||
+    currentUser?.roleRaw === 'ADMIN';
+
+  // Security Lock: Only System Admin can edit System Admin's contract
+  const isContractLocked = !isCreate && isSystemAdminContract && !isCurrentUserSystemAdmin;
+  const isReadOnly = isEmployeeOnly || isContractLocked;
+
   const [employees, setEmployees] = useState([]);
   const [availableStructures, setAvailableStructures] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
@@ -130,7 +147,7 @@ export const ContractForm = () => {
 
   // Check client-side overlap warning whenever employeeId, status, or date range changes
   useEffect(() => {
-    if (!isEmployeeOnly && formData.employeeId && formData.status === 'Active') {
+    if (!isReadOnly && formData.employeeId && formData.status === 'Active') {
       const overlapping = checkContractOverlap(
         formData.employeeId,
         formData.startDate,
@@ -141,7 +158,7 @@ export const ContractForm = () => {
     } else {
       setOverlapWarning(null);
     }
-  }, [formData.employeeId, formData.startDate, formData.endDate, formData.status, isCreate, id, isEmployeeOnly]);
+  }, [formData.employeeId, formData.startDate, formData.endDate, formData.status, isCreate, id, isReadOnly]);
 
   const handleEmployeeChange = (empId) => {
     const matched = employees.find((e) => e.id === empId);
@@ -169,7 +186,7 @@ export const ContractForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isEmployeeOnly) return;
+    if (isReadOnly) return;
     if (!validate()) return;
 
     setSubmitting(true);
@@ -224,9 +241,9 @@ export const ContractForm = () => {
 
       {/* Page Header */}
       <PageHeader
-        title={isEmployeeOnly ? 'My Employment Contract' : (isCreate ? 'New Contract' : 'Contract Details')}
+        title={isReadOnly ? 'Employment Contract' : (isCreate ? 'New Contract' : 'Contract Details')}
         subtitle={
-          isEmployeeOnly
+          isReadOnly
             ? `${formData.employeeName || 'Employee'} • ${formData.position || 'Staff'} (${id})`
             : (isCreate
                 ? 'Establish new employment terms and salary structure'
@@ -239,18 +256,28 @@ export const ContractForm = () => {
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          {isEmployeeOnly ? 'Back to Contracts' : 'Cancel'}
+          {isReadOnly ? 'Back to Contracts' : 'Cancel'}
         </button>
       </PageHeader>
 
-      {/* Informational Notice */}
-      {isEmployeeOnly ? (
+      {/* Informational / Security Notice */}
+      {isContractLocked ? (
+        <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 shadow-2xs">
+          <ShieldCheck className="w-5 h-5 text-rose-600 shrink-0" />
+          <div>
+            <h4 className="font-bold text-sm">System Administrator Contract Protected (Read-Only)</h4>
+            <p className="text-rose-700 text-xs mt-0.5">
+              Only the System Administrator has administrative authority to modify the System Administrator's employment contract.
+            </p>
+          </div>
+        </div>
+      ) : isEmployeeOnly ? (
         <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 shadow-2xs">
           <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
           <div>
             <h4 className="font-bold text-sm">Official Employment Agreement (Read-Only)</h4>
             <p className="text-emerald-700 text-xs mt-0.5">
-              This is your verified employment contract on record with Human Resources & Payroll. Contract terms, wage structures, and work schedules can only be modified by authorized HR administrators.
+              This is your verified employment contract on record with Human Resources &amp; Payroll. Contract terms, wage structures, and work schedules can only be modified by authorized HR administrators.
             </p>
           </div>
         </div>
@@ -264,7 +291,7 @@ export const ContractForm = () => {
       )}
 
       {/* Overlap Validation Warning Banner (HR/Admin only) */}
-      {!isEmployeeOnly && overlapWarning && (
+      {!isReadOnly && overlapWarning && (
         <div className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 shadow-2xs">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
@@ -293,7 +320,7 @@ export const ContractForm = () => {
                 <select
                   value={formData.employeeId}
                   onChange={(e) => handleEmployeeChange(e.target.value)}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 >
                   {employees.map((emp) => (
@@ -315,7 +342,7 @@ export const ContractForm = () => {
                   type="text"
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
               </div>
@@ -328,7 +355,7 @@ export const ContractForm = () => {
                   type="text"
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
               </div>
@@ -340,7 +367,7 @@ export const ContractForm = () => {
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 >
                   <option value="Active">Active</option>
@@ -366,7 +393,7 @@ export const ContractForm = () => {
                   type="date"
                   value={formData.startDate}
                   onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
                 {errors.startDate && (
@@ -382,7 +409,7 @@ export const ContractForm = () => {
                   type="date"
                   value={formData.endDate}
                   onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 />
               </div>
@@ -407,7 +434,7 @@ export const ContractForm = () => {
                     min="1"
                     value={formData.wage}
                     onChange={(e) => setFormData({ ...formData, wage: e.target.value })}
-                    disabled={isEmployeeOnly}
+                    disabled={isReadOnly}
                     className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                   />
                 </div>
@@ -423,7 +450,7 @@ export const ContractForm = () => {
                 <select
                   value={formData.salaryStructure}
                   onChange={(e) => setFormData({ ...formData, salaryStructure: e.target.value })}
-                  disabled={isEmployeeOnly}
+                  disabled={isReadOnly}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-800 disabled:cursor-not-allowed"
                 >
                   {salaryStructures.map((struct) => (
@@ -441,7 +468,7 @@ export const ContractForm = () => {
 
           {/* Action Buttons */}
           <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100">
-            {isEmployeeOnly ? (
+            {isReadOnly ? (
               <button
                 type="button"
                 onClick={() => navigate('/contracts')}

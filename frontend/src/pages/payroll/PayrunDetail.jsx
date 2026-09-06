@@ -249,15 +249,33 @@ export const PayrunDetail = () => {
             </button>
 
             {/* Send Payslips Button */}
-            <button
-              type="button"
-              onClick={() => setIsSendModalOpen(true)}
-              disabled={!isPaid || !canMarkPaid}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-slate-800 hover:bg-slate-900 text-white shadow-xs"
-            >
-              <Mail className="w-3.5 h-3.5" />
-              Send Payslips
-            </button>
+            {(() => {
+              const allPayslipsSent = payslips.length > 0 && payslips.every(s => Boolean(s.email_sent_at || s.emailSentAt || s.emailStatus === 'Sent'));
+              return (
+                <button
+                  type="button"
+                  onClick={() => setIsSendModalOpen(true)}
+                  disabled={!isPaid || !canMarkPaid}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-xs ${
+                    allPayslipsSent
+                      ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                      : 'bg-slate-800 hover:bg-slate-900 text-white'
+                  }`}
+                >
+                  {allPayslipsSent ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                      Payslips Sent
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-3.5 h-3.5" />
+                      Send Payslips
+                    </>
+                  )}
+                </button>
+              );
+            })()}
 
             {canDeleteRun && (
               <button

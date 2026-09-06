@@ -132,6 +132,106 @@ class PayrollAdminService {
       LIMIT 5
     `);
 
+    // 7. Dynamic Available Periods from Database Payruns + Current / Next Months
+    const distinctPeriodRows = await query(`
+      SELECT 
+        DATE_FORMAT(period_start, '%Y-%m') AS period_key,
+        status,
+        COUNT(id) AS run_count,
+        MAX(id) AS latest_run_id
+      FROM payruns
+      GROUP BY DATE_FORMAT(period_start, '%Y-%m'), status
+      ORDER BY period_key DESC
+    `);
+
+    const periodMap = new Map();
+    distinctPeriodRows.forEach((row) => {
+      const key = row.period_key;
+      if (!key) return;
+      const [y, m] = key.split('-');
+      const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+      const monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+      if (!periodMap.has(key)) {
+        periodMap.set(key, {
+          period: key,
+          label: monthName,
+          status: row.status,
+          runCount: parseInt(row.run_count, 10),
+          latestRunId: row.latest_run_id
+        });
+      } else {
+        const existing = periodMap.get(key);
+        // Prioritize PAID > VALIDATED > COMPUTED > DRAFT
+        if (row.status === 'PAID') existing.status = 'PAID';
+        else if (row.status === 'VALIDATED' && existing.status !== 'PAID') existing.status = 'VALIDATED';
+        else if (row.status === 'COMPUTED' && existing.status !== 'PAID' && existing.status !== 'VALIDATED') existing.status = 'COMPUTED';
+        existing.runCount += parseInt(row.run_count, 10);
+      }
+    });
+
+    // Ensure current month and next month exist in list
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+    if (!periodMap.has(currentMonthKey)) {
+      periodMap.set(currentMonthKey, {
+        period: currentMonthKey,
+        label: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+        status: 'UNPROCESSED',
+        runCount: 0
+      });
+    }
+    if (!periodMap.has(nextMonthKey)) {
+      periodMap.set(nextMonthKey, {
+        period: nextMonthKey,
+        label: nextMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' }),
+        status: 'UNPROCESSED',
+        runCount: 0
+      });
+    }
+
+    const availablePeriods = Array.from(periodMap.values())
+      .sort((a, b) => b.period.localeCompare(a.period))
+      .map((p) => {
+        let statusBadge = '';
+        if (p.status === 'PAID') statusBadge = ' • Completed (Paid)';
+        else if (p.status === 'VALIDATED') statusBadge = ' • Approved (Pending Payment)';
+        else if (p.status === 'COMPUTED') statusBadge = ' • Computed (Review)';
+        else if (p.status === 'DRAFT') statusBadge = ' • In Setup (Draft)';
+        else statusBadge = ' • Ready to Process';
+        return {
+          ...p,
+          displayLabel: `${p.label}${statusBadge}`
+        };
+      });
+
+    // 8. Find active / latest payrun specifically for the selected period
+    let currentPeriodPayrun = null;
+    if (period) {
+      const [pRun] = await query(`
+        SELECT 
+          pr.*,
+          ss.name AS structure_name,
+          ss.code AS structure_code,
+          (SELECT COUNT(*) FROM payslips p WHERE p.payrun_id = pr.id AND p.email_sent_at IS NOT NULL) AS emails_sent_count
+        FROM payruns pr
+        LEFT JOIN salary_structures ss ON pr.salary_structure_id = ss.id
+        WHERE pr.period_start LIKE ?
+        ORDER BY pr.id DESC
+        LIMIT 1
+      `, [`${period}%`]);
+      if (pRun) {
+        currentPeriodPayrun = {
+          ...pRun,
+          isCompleted: pRun.status === 'PAID',
+          allEmailsSent: pRun.status === 'PAID' && pRun.employee_count > 0 && pRun.emails_sent_count >= pRun.employee_count
+        };
+      }
+    }
+
     return {
       financials: {
         totalActiveEmployees,
@@ -154,7 +254,9 @@ class PayrollAdminService {
         pendingLeaves: pendingLeaveCount.count || 0,
         isClearForPayrun: (missingBankCount.count === 0 && missingContractCount.count === 0)
       },
-      recentPayruns
+      recentPayruns,
+      availablePeriods,
+      currentPeriodPayrun
     };
   }
 
@@ -163,6 +265,21 @@ class PayrollAdminService {
    * Returns itemized blockers, warnings, and calculated readiness score
    */
   async runComplianceCheck({ period = null } = {}) {
+    // 0. Check if a payrun batch for this period is already processed / finalized
+    let finalizedPayrun = null;
+    if (period) {
+      const [pRun] = await query(`
+        SELECT id, name, run_code, status, total_gross, total_net, employee_count
+        FROM payruns
+        WHERE period_start LIKE ? AND status = 'PAID'
+        ORDER BY id DESC
+        LIMIT 1
+      `, [`${period}%`]);
+      if (pRun) {
+        finalizedPayrun = pRun;
+      }
+    }
+
     // 1. Total active workforce
     const activeEmployees = await query(`
       SELECT 
@@ -180,6 +297,91 @@ class PayrollAdminService {
     `);
 
     const totalActive = activeEmployees.length;
+
+    if (finalizedPayrun) {
+      return {
+        readinessScore: 100,
+        status: 'FINALIZED',
+        totalActiveEmployees: totalActive,
+        isCompleted: true,
+        finalizedPayrun,
+        summary: {
+          blockerCount: 0,
+          warningCount: 0,
+          isPayrunReady: true,
+          isAlreadyProcessed: true,
+          message: `Payroll cycle for ${period} is finalized and disbursed (${finalizedPayrun.name} • ${finalizedPayrun.employee_count} staff disbursed). Records are locked for accounting.`
+        },
+        auditChecks: [
+          {
+            id: 'cycle_status',
+            title: 'Disbursement Complete',
+            description: `Batch #${finalizedPayrun.id} (${finalizedPayrun.run_code || 'PAID'}) is fully paid and audited.`,
+            severity: 'INFO',
+            failedCount: 0,
+            passed: true,
+            items: [],
+            actionLabel: `View Payrun #${finalizedPayrun.id}`,
+            actionUrl: `/payroll/payruns/${finalizedPayrun.id}`
+          },
+          {
+            id: 'missing_contracts',
+            title: 'Active Employment Contracts',
+            description: 'Employment agreements verified for all disbursed personnel.',
+            severity: 'BLOCKER',
+            failedCount: 0,
+            passed: true,
+            items: [],
+            actionLabel: 'View Contracts',
+            actionUrl: '/contracts'
+          },
+          {
+            id: 'missing_bank',
+            title: 'Employee Bank & IFSC Details',
+            description: 'All payments successfully credited to verified employee bank accounts.',
+            severity: 'BLOCKER',
+            failedCount: 0,
+            passed: true,
+            items: [],
+            actionLabel: 'View Directory',
+            actionUrl: '/employees'
+          },
+          {
+            id: 'unassigned_structures',
+            title: 'Salary Structure Bindings',
+            description: 'Salary structures and statutory rule sets applied cleanly.',
+            severity: 'BLOCKER',
+            failedCount: 0,
+            passed: true,
+            items: [],
+            actionLabel: 'View Structures',
+            actionUrl: '/payroll/salary-structures'
+          },
+          {
+            id: 'pending_leaves',
+            title: 'Time Off Approvals',
+            description: 'Time off requests reconciled for this period.',
+            severity: 'WARNING',
+            failedCount: 0,
+            passed: true,
+            items: [],
+            actionLabel: 'Review Time Off',
+            actionUrl: '/time-off/requests'
+          },
+          {
+            id: 'duplicate_slips',
+            title: 'Duplicate Payslip Prevention',
+            description: 'Batch slips reconciled with zero unhandled overlaps.',
+            severity: 'BLOCKER',
+            failedCount: 0,
+            passed: true,
+            items: [],
+            actionLabel: `View Payrun #${finalizedPayrun.id}`,
+            actionUrl: `/payroll/payruns/${finalizedPayrun.id}`
+          }
+        ]
+      };
+    }
 
     // 2. Audit: Missing Bank Details
     const missingBankEmployees = await query(`
@@ -279,7 +481,7 @@ class PayrollAdminService {
     attSql += ' LIMIT 20';
     const missingCheckouts = await query(attSql, attParams);
 
-    // 7. Audit: Duplicate Payslips or Period Overlaps
+    // 7. Audit: Duplicate Payslips or Period Overlaps in Active/Open Batches
     let duplicatePayslips = [];
     if (period) {
       duplicatePayslips = await query(`
@@ -289,8 +491,9 @@ class PayrollAdminService {
           CONCAT(e.first_name, ' ', e.last_name) AS full_name,
           COUNT(p.id) AS slip_count
         FROM payslips p
+        JOIN payruns pr ON p.payrun_id = pr.id
         JOIN employees e ON p.employee_id = e.id
-        WHERE p.period_start LIKE ?
+        WHERE p.period_start LIKE ? AND pr.status != 'PAID'
         GROUP BY p.employee_id
         HAVING COUNT(p.id) > 1
       `, [`${period}%`]);

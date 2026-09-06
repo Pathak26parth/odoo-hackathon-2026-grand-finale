@@ -279,6 +279,27 @@ class ContractController {
         return sendError(res, 'Contract not found.', 404);
       }
 
+      // Security Check: Only the System Administrator can modify or delete the System Administrator's contract
+      const [contractOwner] = await query(`
+        SELECT c.id, c.employee_id, e.employee_code, e.first_name, e.last_name, r.name AS role_name
+        FROM contracts c
+        JOIN employees e ON c.employee_id = e.id
+        LEFT JOIN users u ON u.employee_id = e.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE c.id = ?
+      `, [id]);
+
+      if (contractOwner) {
+        const isSystemAdminContract =
+          contractOwner.employee_code === 'EMP-001' ||
+          contractOwner.role_name === 'ADMIN' ||
+          (contractOwner.first_name === 'System' && contractOwner.last_name === 'Administrator');
+
+        if (isSystemAdminContract && req.user.role !== 'ADMIN') {
+          return sendError(res, 'Forbidden: Only the System Administrator can modify the System Administrator contract.', 403);
+        }
+      }
+
       const normalizedStatus = status ? status.toUpperCase() : undefined;
 
       // Strict Business Rule: Only ONE ACTIVE contract per employee at a time
@@ -372,6 +393,28 @@ class ContractController {
       }
 
       const { id } = req.params;
+
+      // Security Check: Only the System Administrator can delete the System Administrator's contract
+      const [contractOwner] = await query(`
+        SELECT c.id, c.employee_id, e.employee_code, e.first_name, e.last_name, r.name AS role_name
+        FROM contracts c
+        JOIN employees e ON c.employee_id = e.id
+        LEFT JOIN users u ON u.employee_id = e.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE c.id = ?
+      `, [id]);
+
+      if (contractOwner) {
+        const isSystemAdminContract =
+          contractOwner.employee_code === 'EMP-001' ||
+          contractOwner.role_name === 'ADMIN' ||
+          (contractOwner.first_name === 'System' && contractOwner.last_name === 'Administrator');
+
+        if (isSystemAdminContract && req.user.role !== 'ADMIN') {
+          return sendError(res, 'Forbidden: Only the System Administrator can delete the System Administrator contract.', 403);
+        }
+      }
+
       await query('DELETE FROM contracts WHERE id = ?', [id]);
       return sendSuccess(res, 'Contract deleted successfully');
     } catch (error) {
