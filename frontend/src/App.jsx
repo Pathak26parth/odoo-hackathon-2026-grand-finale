@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // Authentication & Users
 import { Login } from './pages/auth/Login';
+import { ResetPassword } from './pages/auth/ResetPassword';
 import { Users } from './pages/admin/Users';
 import { UserForm } from './pages/admin/UserForm';
 
@@ -374,8 +375,11 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
 
-          {/* Public Login Route */}
+          {/* Public Authentication Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword isActivation={false} />} />
+          <Route path="/activate" element={<ResetPassword isActivation={true} />} />
+          <Route path="/activate-account" element={<ResetPassword isActivation={true} />} />
 
           {/* Protected Application Routes */}
           <Route
