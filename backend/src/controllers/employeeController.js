@@ -137,15 +137,17 @@ class EmployeeController {
 
       const employee = rows[0];
 
-      // Fetch Bank Details (Masked)
+      // Fetch Bank Details (Masked for general, full for privileged HR/Admin)
       const bankRows = await query('SELECT * FROM employee_bank_details WHERE employee_id = ? LIMIT 1', [employee.id]);
       if (bankRows.length > 0) {
         const b = bankRows[0];
+        const isPrivileged = req.user && (req.user.role === 'ADMIN' || req.user.role === 'HR_PAYROLL_ADMIN' || req.user.role === 'HR_MANAGER' || req.user.employeeId === employee.id);
         employee.bankDetails = {
           id: b.id,
           accountHolderName: b.account_holder_name,
           bankName: b.bank_name,
           accountNumberMasked: maskAccountNumber(b.account_number),
+          accountNumber: isPrivileged ? b.account_number : maskAccountNumber(b.account_number),
           ifscCode: b.ifsc_code,
           branchName: b.branch_name,
           accountType: b.account_type,
@@ -284,6 +286,18 @@ class EmployeeController {
       }
       const effectiveRole = chosenRole || 'EMPLOYEE';
 
+      // Resolve bank details (nested bankDetails or top-level fields)
+      const resolvedBankData = bankDetails || (
+        (req.body.bankName || req.body.bank_name || req.body.accountNumber || req.body.account_number || req.body.ifscCode || req.body.ifsc_code) ? {
+          accountHolderName: req.body.accountHolderName || req.body.account_holder_name || `${firstName} ${lastName}`.trim(),
+          bankName: req.body.bankName || req.body.bank_name || 'Bank',
+          accountNumber: req.body.accountNumber || req.body.account_number,
+          ifscCode: req.body.ifscCode || req.body.ifsc_code,
+          branchName: req.body.branchName || req.body.branch_name || null,
+          accountType: req.body.accountType || req.body.account_type || 'SALARY'
+        } : null
+      );
+
       const result = await authService.createEmployeeWithAccount({
         employeeData: {
           employeeCode,
@@ -301,7 +315,7 @@ class EmployeeController {
           profilePhotoUrl: photoToSave
         },
         roleName: effectiveRole,
-        bankData: bankDetails || null,
+        bankData: resolvedBankData || null,
         initialContract: initialContract || null,
         createdByUserId: req.user.id,
         userIp: req.ip,
@@ -546,28 +560,52 @@ class EmployeeController {
       }
 
       // Update Bank Details if provided
-      if (bankDetails && bankDetails.accountNumber && bankDetails.ifscCode) {
-        await query(
-          `INSERT INTO employee_bank_details (employee_id, account_holder_name, bank_name, account_number, ifsc_code, branch_name, account_type, is_primary)
-           VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
-           ON DUPLICATE KEY UPDATE
-             account_holder_name = VALUES(account_holder_name),
-             bank_name = VALUES(bank_name),
-             account_number = VALUES(account_number),
-             ifsc_code = VALUES(ifsc_code),
-             branch_name = VALUES(branch_name),
-             account_type = VALUES(account_type),
-             updated_at = NOW()`,
-          [
-            actualEmpId,
-            bankDetails.accountHolderName || `${fName || existing[0].first_name} ${lName || existing[0].last_name}`,
-            bankDetails.bankName || 'Bank',
-            bankDetails.accountNumber.trim(),
-            bankDetails.ifscCode.trim().toUpperCase(),
-            bankDetails.branchName || null,
-            bankDetails.accountType || 'SALARY'
-          ]
-        );
+      const resolvedBank = bankDetails || (
+        (req.body.bankName || req.body.bank_name || req.body.accountNumber || req.body.account_number || req.body.ifscCode || req.body.ifsc_code) ? {
+          bankName: req.body.bankName || req.body.bank_name,
+          accountHolderName: req.body.accountHolderName || req.body.account_holder_name,
+          accountNumber: req.body.accountNumber || req.body.account_number,
+          ifscCode: req.body.ifscCode || req.body.ifsc_code,
+          branchName: req.body.branchName || req.body.branch_name,
+          accountType: req.body.accountType || req.body.account_type
+        } : null
+      );
+
+      if (resolvedBank) {
+        const existingBank = await query('SELECT * FROM employee_bank_details WHERE employee_id = ? LIMIT 1', [actualEmpId]);
+        
+        let newAccNum = resolvedBank.accountNumber ? String(resolvedBank.accountNumber).trim() : '';
+        const isMaskedOrEmpty = !newAccNum || newAccNum.includes('X') || newAccNum.includes('•') || newAccNum.includes('*');
+
+        if (isMaskedOrEmpty && existingBank.length > 0) {
+          newAccNum = existingBank[0].account_number;
+        }
+
+        let newIfsc = resolvedBank.ifscCode ? String(resolvedBank.ifscCode).trim().toUpperCase() : '';
+        if (!newIfsc && existingBank.length > 0) {
+          newIfsc = existingBank[0].ifsc_code;
+        }
+
+        const newHolder = resolvedBank.accountHolderName || (existingBank.length > 0 ? existingBank[0].account_holder_name : `${fName || existing[0].first_name} ${lName || existing[0].last_name}`.trim());
+        const newBankName = resolvedBank.bankName || (existingBank.length > 0 ? existingBank[0].bank_name : 'Bank');
+        const newBranch = resolvedBank.branchName !== undefined ? resolvedBank.branchName : (existingBank.length > 0 ? existingBank[0].branch_name : null);
+        const newType = resolvedBank.accountType || (existingBank.length > 0 ? existingBank[0].account_type : 'SALARY');
+
+        if (newAccNum && newIfsc) {
+          await query(
+            `INSERT INTO employee_bank_details (employee_id, account_holder_name, bank_name, account_number, ifsc_code, branch_name, account_type, is_primary)
+             VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+             ON DUPLICATE KEY UPDATE
+               account_holder_name = VALUES(account_holder_name),
+               bank_name = VALUES(bank_name),
+               account_number = VALUES(account_number),
+               ifsc_code = VALUES(ifsc_code),
+               branch_name = VALUES(branch_name),
+               account_type = VALUES(account_type),
+               updated_at = NOW()`,
+            [actualEmpId, newHolder, newBankName, newAccNum, newIfsc, newBranch, newType]
+          );
+        }
       }
 
       // Fetch fresh updated employee with joins
@@ -595,6 +633,26 @@ class EmployeeController {
         WHERE e.id = ?
         LIMIT 1
       `, [actualEmpId]);
+
+      // Fetch fresh bank details for response
+      const updatedBankRows = await query('SELECT * FROM employee_bank_details WHERE employee_id = ? LIMIT 1', [actualEmpId]);
+      if (updatedBankRows.length > 0 && updatedEmp) {
+        const b = updatedBankRows[0];
+        const isPrivileged = req.user && (req.user.role === 'ADMIN' || req.user.role === 'HR_PAYROLL_ADMIN' || req.user.role === 'HR_MANAGER' || req.user.employeeId === actualEmpId);
+        updatedEmp.bankDetails = {
+          id: b.id,
+          accountHolderName: b.account_holder_name,
+          bankName: b.bank_name,
+          accountNumberMasked: maskAccountNumber(b.account_number),
+          accountNumber: isPrivileged ? b.account_number : maskAccountNumber(b.account_number),
+          ifscCode: b.ifsc_code,
+          branchName: b.branch_name,
+          accountType: b.account_type,
+          isPrimary: !!b.is_primary
+        };
+      } else if (updatedEmp) {
+        updatedEmp.bankDetails = null;
+      }
 
       // Trigger asynchronous email notification to target email
       if (targetEmail) {

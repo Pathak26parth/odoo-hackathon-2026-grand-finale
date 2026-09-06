@@ -42,7 +42,17 @@ export function normalizeEmployee(emp) {
     allocationsCount: emp.metrics?.allocationsCount || emp.allocationsCount || 0,
     currentWage: emp.current_wage || emp.currentWage || null,
     activeContractId: emp.active_contract_id || emp.activeContractId || null,
-    bankDetails: emp.bankDetails || null
+    bankDetails: (emp.bankDetails || emp.bank_details) ? {
+      id: emp.bankDetails?.id || emp.bank_details?.id,
+      accountHolderName: emp.bankDetails?.accountHolderName || emp.bankDetails?.account_holder_name || emp.bank_details?.account_holder_name || '',
+      bankName: emp.bankDetails?.bankName || emp.bankDetails?.bank_name || emp.bank_details?.bank_name || '',
+      accountNumber: emp.bankDetails?.accountNumber || emp.bankDetails?.account_number || emp.bank_details?.account_number || '',
+      accountNumberMasked: emp.bankDetails?.accountNumberMasked || emp.bankDetails?.account_number_masked || emp.bank_details?.account_number_masked || '',
+      ifscCode: emp.bankDetails?.ifscCode || emp.bankDetails?.ifsc_code || emp.bank_details?.ifsc_code || '',
+      branchName: emp.bankDetails?.branchName || emp.bankDetails?.branch_name || emp.bank_details?.branch_name || '',
+      accountType: emp.bankDetails?.accountType || emp.bankDetails?.account_type || emp.bank_details?.account_type || 'SALARY',
+      isPrimary: emp.bankDetails?.isPrimary !== undefined ? emp.bankDetails.isPrimary : (emp.bank_details?.is_primary !== undefined ? !!emp.bank_details.is_primary : true)
+    } : null
   };
 }
 
@@ -107,7 +117,16 @@ export const employeeService = {
       profilePhotoUrl: payload.avatar || payload.profilePhotoUrl || null,
       role: payload.role || payload.roleName || 'EMPLOYEE',
       roleName: payload.role || payload.roleName || 'EMPLOYEE',
-      bankDetails: payload.bankDetails || null,
+      bankDetails: payload.bankDetails || (
+        (payload.accountNumber || payload.bankName || payload.ifscCode) ? {
+          accountHolderName: payload.accountHolderName || `${payload.firstName || ''} ${payload.lastName || ''}`.trim(),
+          bankName: payload.bankName || 'Bank',
+          accountNumber: payload.accountNumber,
+          ifscCode: payload.ifscCode,
+          branchName: payload.branchName || null,
+          accountType: payload.accountType || 'SALARY'
+        } : null
+      ),
       initialContract: payload.initialContract || (payload.wage ? { wage: payload.wage, salaryStructureId: 1 } : null)
     };
 
@@ -137,7 +156,16 @@ export const employeeService = {
       profilePhotoUrl: payload.avatar || payload.profilePhotoUrl,
       role: payload.role || payload.roleName,
       roleName: payload.role || payload.roleName,
-      bankDetails: payload.bankDetails
+      bankDetails: payload.bankDetails || (
+        (payload.accountNumber || payload.bankName || payload.ifscCode) ? {
+          accountHolderName: payload.accountHolderName || `${payload.firstName || ''} ${payload.lastName || ''}`.trim(),
+          bankName: payload.bankName || 'Bank',
+          accountNumber: payload.accountNumber,
+          ifscCode: payload.ifscCode,
+          branchName: payload.branchName || null,
+          accountType: payload.accountType || 'SALARY'
+        } : null
+      )
     };
 
     const res = await api.put(`/employees/${id}`, body);

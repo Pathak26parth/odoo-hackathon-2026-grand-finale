@@ -276,21 +276,43 @@ class AuthService {
       const employeeId = empInsert.insertId;
 
       // 4. Insert Bank Details if provided
-      if (bankData && bankData.accountNumber && bankData.ifscCode) {
-        await connection.execute(
-          `INSERT INTO employee_bank_details 
-            (employee_id, account_holder_name, bank_name, account_number, ifsc_code, branch_name, account_type, is_primary)
-           VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
-          [
+      let savedBankDetails = null;
+      if (bankData) {
+        const accNum = String(bankData.accountNumber || bankData.account_number || '').trim();
+        const ifsc = String(bankData.ifscCode || bankData.ifsc_code || '').trim().toUpperCase();
+        const bName = String(bankData.bankName || bankData.bank_name || '').trim() || 'Bank';
+        const holder = String(bankData.accountHolderName || bankData.account_holder_name || '').trim() || `${employeeData.firstName} ${employeeData.lastName}`.trim();
+        const branch = bankData.branchName || bankData.branch_name || null;
+        const aType = bankData.accountType || bankData.account_type || 'SALARY';
+
+        if (accNum && ifsc) {
+          const [bankInsert] = await connection.execute(
+            `INSERT INTO employee_bank_details 
+              (employee_id, account_holder_name, bank_name, account_number, ifsc_code, branch_name, account_type, is_primary)
+             VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
+            [
+              employeeId,
+              holder,
+              bName,
+              accNum,
+              ifsc,
+              branch,
+              aType
+            ]
+          );
+
+          savedBankDetails = {
+            id: bankInsert.insertId,
             employeeId,
-            bankData.accountHolderName || `${employeeData.firstName} ${employeeData.lastName}`,
-            bankData.bankName || 'Bank',
-            bankData.accountNumber.trim(),
-            bankData.ifscCode.trim().toUpperCase(),
-            bankData.branchName || null,
-            bankData.accountType || 'SALARY'
-          ]
-        );
+            accountHolderName: holder,
+            bankName: bName,
+            accountNumber: accNum,
+            ifscCode: ifsc,
+            branchName: branch,
+            accountType: aType,
+            isPrimary: true
+          };
+        }
       }
 
       // 5. Create Initial Active Contract if provided
@@ -390,6 +412,7 @@ class AuthService {
         mustChangePassword: true,
         tempPassword,
         activationToken,
+        bankDetails: savedBankDetails,
         message: 'Employee profile, user account, bank details, and leave allocations created successfully. Invitation email sent.'
       };
     });
