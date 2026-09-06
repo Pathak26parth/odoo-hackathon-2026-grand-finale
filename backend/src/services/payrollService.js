@@ -109,13 +109,24 @@ class PayrollService {
           break;
 
         case 'TOTAL_DED':
-          amount = context.PF + context.PT + context.TDS;
+        case 'TD':
+        case 'TOTAL_DEDUCTION':
+        case 'TOTAL_DEDUCTIONS':
+        case 'TOT_DED':
+          amount = (context.PF || 0) + (context.PT || 0) + (context.TDS || 0);
+          if (deductionTotal > 0 && amount === 0) {
+            amount = deductionTotal;
+          }
           context.TOTAL_DED = amount;
+          context.TD = amount;
           deductionTotal = amount;
           break;
 
         case 'NET':
-          amount = Math.max(0, context.GROSS - context.TOTAL_DED);
+        case 'NET_PAY':
+        case 'NET_SALARY':
+          const dedToDeduct = context.TOTAL_DED || context.TD || deductionTotal;
+          amount = Math.max(0, context.GROSS - dedToDeduct);
           context.NET = amount;
           break;
 

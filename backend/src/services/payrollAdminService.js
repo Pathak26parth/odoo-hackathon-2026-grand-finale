@@ -685,18 +685,24 @@ class PayrollAdminService {
       BASIC: 0,
       GROSS: 0,
       NET: 0,
-      TOTAL_DED: 0
+      TOTAL_DED: 0,
+      TD: 0
     };
 
     const simulatedLines = [];
     let grossAccumulator = 0;
-    let deductionAccumulator = 0;
+    let individualDeductionsAccumulator = 0;
+    let explicitTotalDeductions = null;
 
     for (const rule of rules) {
       let lineAmount = 0;
       const compType = rule.computation_type;
       const ruleVal = parseFloat(rule.value) || 0;
       let formulaExpression = rule.formula || '';
+
+      const isTotalDeductionRule =
+        ['TOTAL_DED', 'TD', 'TOTAL_DEDUCTIONS', 'TOTAL_DEDUCTION', 'TOT_DED'].includes(rule.code.toUpperCase()) ||
+        /total\s*deduction/i.test(rule.name);
 
       if (compType === 'FIXED') {
         lineAmount = ruleVal;
@@ -716,11 +722,13 @@ class PayrollAdminService {
             .replace(/contract\.wage/gi, String(numWage))
             .replace(/\bwage\b/gi, String(numWage));
 
-          // Replace known evaluated rule codes
-          Object.keys(context).forEach((key) => {
-            const regex = new RegExp(`\\b${key}\\b`, 'g');
-            expr = expr.replace(regex, String(context[key]));
-          });
+          // Replace known evaluated rule codes (longer keys first to prevent partial token overlaps)
+          Object.keys(context)
+            .sort((a, b) => b.length - a.length)
+            .forEach((key) => {
+              const regex = new RegExp(`\\b${key}\\b`, 'g');
+              expr = expr.replace(regex, String(context[key]));
+            });
 
           // Safe math evaluation
           if (/^[0-9+\-*/().\s]+$/.test(expr)) {
@@ -736,19 +744,41 @@ class PayrollAdminService {
       // Safeguard against negative values
       lineAmount = Math.max(0, lineAmount);
 
-      // Record in context for subsequent rules
-      context[rule.code] = lineAmount;
-
-      if (rule.category === 'BASIC' || rule.category === 'ALLOWANCE') {
+      // Handle category & accumulators properly:
+      // If this is a summary Total Deductions rule (e.g. TOTAL_DED / TD):
+      // Only TD should be deducted from total salary - do NOT double-add it into individual deductions.
+      if (isTotalDeductionRule) {
+        if (lineAmount === 0 && individualDeductionsAccumulator > 0) {
+          lineAmount = individualDeductionsAccumulator;
+        }
+        explicitTotalDeductions = lineAmount;
+        context.TOTAL_DED = lineAmount;
+        context.TD = lineAmount;
+        context.TOTAL_DEDUCTION = lineAmount;
+        context.TOTAL_DEDUCTIONS = lineAmount;
+      } else if (rule.category === 'DEDUCTION') {
+        individualDeductionsAccumulator += lineAmount;
+        if (explicitTotalDeductions === null) {
+          context.TOTAL_DED = individualDeductionsAccumulator;
+          context.TD = individualDeductionsAccumulator;
+          context.TOTAL_DEDUCTION = individualDeductionsAccumulator;
+          context.TOTAL_DEDUCTIONS = individualDeductionsAccumulator;
+        }
+      } else if (rule.category === 'BASIC' || rule.category === 'ALLOWANCE') {
         grossAccumulator += lineAmount;
       } else if (rule.category === 'GROSS') {
-        context.GROSS = lineAmount || grossAccumulator;
-      } else if (rule.category === 'DEDUCTION') {
-        deductionAccumulator += lineAmount;
-        context.TOTAL_DED = deductionAccumulator;
+        if (lineAmount === 0 && grossAccumulator === 0) {
+          lineAmount = numWage;
+        }
+        context.GROSS = lineAmount || grossAccumulator || numWage;
       } else if (rule.category === 'NET') {
-        context.NET = lineAmount || Math.max(0, context.GROSS - deductionAccumulator);
+        const currentDeductions = explicitTotalDeductions !== null ? explicitTotalDeductions : individualDeductionsAccumulator;
+        const currentGross = context.GROSS || grossAccumulator || numWage;
+        context.NET = lineAmount || Math.max(0, currentGross - currentDeductions);
       }
+
+      // Record in context for subsequent rules
+      context[rule.code] = lineAmount;
 
       simulatedLines.push({
         ruleId: rule.id,
@@ -762,9 +792,9 @@ class PayrollAdminService {
       });
     }
 
-    const finalGross = context.GROSS || grossAccumulator;
-    const finalDeductions = context.TOTAL_DED || deductionAccumulator;
-    const finalNet = context.NET || Math.max(0, finalGross - finalDeductions);
+    const finalGross = context.GROSS || grossAccumulator || numWage;
+    const finalDeductions = explicitTotalDeductions !== null ? explicitTotalDeductions : individualDeductionsAccumulator;
+    const finalNet = context.NET !== undefined && context.NET !== null ? context.NET : Math.max(0, finalGross - finalDeductions);
 
     return {
       wage: numWage,
