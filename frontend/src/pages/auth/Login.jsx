@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import authService from '../../services/authService';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -12,11 +13,15 @@ export const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isAdminEmail = email.trim().toLowerCase() === 'admin@peoplepay360.com';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setResetMessage('');
     setLoading(true);
 
     try {
@@ -76,6 +81,13 @@ export const Login = () => {
             </div>
           )}
 
+          {resetMessage && (
+            <div className="mb-5 flex items-center gap-2 p-3 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>{resetMessage}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             {/* Email Field */}
             <div>
@@ -88,7 +100,11 @@ export const Login = () => {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError('');
+                    setResetMessage('');
+                  }}
                   placeholder="Email ID"
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
@@ -133,16 +149,35 @@ export const Login = () => {
                 <span className="text-slate-600 font-medium">Remember me</span>
               </label>
 
-              <a
-                href="#forgot"
-                onClick={(e) => {
-                  e.preventDefault();
-                  alert('Password reset link has been dispatched to your email.');
-                }}
-                className="text-blue-600 hover:underline font-semibold"
-              >
-                Forgot password?
-              </a>
+              {isAdminEmail ? (
+                <span
+                  title="Password recovery is disabled for the Primary System Administrator account."
+                  className="text-slate-400 text-xs font-medium cursor-not-allowed select-none opacity-60"
+                >
+                  Forgot password?
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setError('');
+                    setResetMessage('');
+                    if (!email.trim()) {
+                      setError('Please enter your work email address to reset your password.');
+                      return;
+                    }
+                    try {
+                      await authService.forgotPassword(email.trim());
+                      setResetMessage(`Password reset link has been dispatched to ${email.trim()}.`);
+                    } catch (err) {
+                      setResetMessage(`If an account exists with ${email.trim()}, password reset instructions have been dispatched.`);
+                    }
+                  }}
+                  className="text-blue-600 hover:underline font-semibold focus:outline-none cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              )}
             </div>
 
             {/* Primary Login Button */}

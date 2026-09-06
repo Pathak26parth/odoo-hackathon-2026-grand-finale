@@ -336,7 +336,12 @@ class AuthController {
       const { email } = req.body;
       if (!email) return sendError(res, 'Email is required.', 400);
 
-      const result = await authService.forgotPassword({ email });
+      const cleanEmail = String(email).toLowerCase().trim();
+      if (cleanEmail === 'admin@peoplepay360.com') {
+        return sendError(res, 'Password recovery is disabled for the Primary System Administrator account.', 403);
+      }
+
+      const result = await authService.forgotPassword({ email: cleanEmail });
       return sendSuccess(res, result.message);
     } catch (error) {
       next(error);

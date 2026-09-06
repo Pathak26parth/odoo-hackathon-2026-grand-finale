@@ -1,3 +1,4 @@
+
 const { query, transaction } = require('../config/db');
 const { hashPassword, generateSecurePassword } = require('../utils/password');
 const { generateCryptoToken, hashCryptoToken } = require('../utils/generateToken');
@@ -449,7 +450,14 @@ class AuthService {
    * Initiate Forgot Password Flow
    */
   async forgotPassword({ email }) {
-    const users = await query('SELECT u.id, u.email, e.first_name, e.last_name FROM users u LEFT JOIN employees e ON u.employee_id = e.id WHERE u.email = ?', [email.toLowerCase().trim()]);
+    const cleanEmail = String(email || '').toLowerCase().trim();
+    if (cleanEmail === 'admin@peoplepay360.com') {
+      const err = new Error('Password recovery is disabled for the Primary System Administrator account.');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const users = await query('SELECT u.id, u.email, e.first_name, e.last_name FROM users u LEFT JOIN employees e ON u.employee_id = e.id WHERE u.email = ?', [cleanEmail]);
 
     if (users.length === 0) {
       return { message: 'If an account exists with this email, a password reset link has been dispatched.' };
