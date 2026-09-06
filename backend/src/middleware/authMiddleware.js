@@ -99,6 +99,14 @@ async function requireAuth(req, res, next) {
   }
 }
 
-module.exports = {
-  requireAuth
-};
+// Support both direct middleware function invocation and named { requireAuth }, { authenticate } destructuring
+requireAuth.requireAuth = requireAuth;
+requireAuth.authenticate = requireAuth;
+requireAuth.default = requireAuth;
+
+module.exports = requireAuth;
+module.exports.requireAuth = requireAuth;
+module.exports.authenticate = requireAuth;
+module.exports.default = requireAuth;
+
+

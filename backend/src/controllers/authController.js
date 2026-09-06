@@ -411,4 +411,19 @@ class AuthController {
   }
 }
 
-module.exports = new AuthController();
+const authController = new AuthController();
+
+module.exports = authController;
+module.exports.AuthController = AuthController;
+module.exports.authController = authController;
+module.exports.default = authController;
+
+// Export bound functions for named destructuring
+module.exports.login = authController.login.bind(authController);
+module.exports.refreshToken = authController.refreshToken.bind(authController);
+module.exports.activateAccount = authController.activateAccount.bind(authController);
+module.exports.forgotPassword = authController.forgotPassword.bind(authController);
+module.exports.resetPassword = authController.resetPassword.bind(authController);
+module.exports.getMe = authController.getMe.bind(authController);
+module.exports.logout = authController.logout.bind(authController);
+module.exports.changePassword = authController.changePassword.bind(authController);
