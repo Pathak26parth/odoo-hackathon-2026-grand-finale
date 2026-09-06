@@ -47,7 +47,9 @@ backend/
 │   │   ├── salaryRuleController.js  # Salary computation rules (Basic, HRA, SA, PF, PT, TDS, Gross, Net)
 │   │   ├── payrunController.js      # 2-step payrun wizard, scope validation, batch computation, lock & pay
 │   │   ├── payslipController.js     # Individual payslips, rule breakdowns, dynamic PDF, email delivery
-│   │   └── dashboardController.js   # Real-time calculated KPI metrics, attendance health, department charts
+│   │   ├── dashboardController.js   # Real-time calculated KPI metrics, attendance health, department charts
+│   │   ├── payrollAdminController.js # Command center overview, pre-flight audits, simulator, bulk actions
+│   │   └── notificationController.js # In-app notification center, unread badges, mark as read, delete
 │   ├── middleware/
 │   │   ├── authMiddleware.js        # requireAuth: validates JWT access token & attaches req.user
 │   │   ├── permissionMiddleware.js  # requirePermission, requireRole, requireSelfOrAdmin
@@ -60,6 +62,7 @@ backend/
 │   │   ├── attendanceService.js     # Schedule matching, late detection, worked/overtime hours calculation
 │   │   ├── timeOffService.js        # Balance validation and atomic deduction on approval
 │   │   ├── payrollService.js        # Period contract resolution, sequential rule engine, payrun computation
+│   │   ├── payrollAdminService.js   # Pipeline metrics, dynamic wage simulation, pre-flight audits
 │   │   └── faceVerificationService.js # 1:1 biometrics & liveness verification engine
 │   ├── utils/
 │   │   ├── jwt.js                   # JWT sign/verify with SHA-256 token hashing
@@ -80,6 +83,8 @@ backend/
 │   │   ├── payrunRoutes.js          # /api/payruns/*
 │   │   ├── payslipRoutes.js         # /api/payslips/*
 │   │   ├── dashboardRoutes.js       # /api/dashboard
+│   │   ├── payrollAdminRoutes.js    # /api/payroll-admin/* (Overview, simulator, compliance, bulk actions)
+│   │   ├── notificationRoutes.js    # /api/notifications/* (User notification feed, read, delete)
 │   │   └── index.js                 # Root router aggregator & /api/health
 │   ├── app.js                       # Express app configuration (CORS, Helmet, RateLimiter, CookieParser)
 │   └── server.js                    # Server startup & DB connection listener

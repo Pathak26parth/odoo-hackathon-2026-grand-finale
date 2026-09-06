@@ -420,3 +420,107 @@ Base URL: `http://localhost:5000/api`
   }
 }
 ```
+
+---
+
+## 13. Payroll Admin Command Center (`/api/payroll-admin`)
+
+### `GET /api/payroll-admin/overview`
+- **Auth**: Bearer JWT (Admin, HR Payroll Admin)
+- **Response**: `200 OK`
+- Returns pipeline status, current cycle summary, contract liability aggregations, and available periods.
+
+### `GET /api/payroll-admin/compliance-check`
+- **Auth**: Bearer JWT (Admin, HR Payroll Admin)
+- **Response**: `200 OK`
+- Pre-flight compliance audit detecting missing contracts, unassigned bank details, unlinked structures, and pending leaves.
+
+### `POST /api/payroll-admin/simulate`
+- **Auth**: Bearer JWT (Admin, HR Payroll Admin)
+- **Request Body**:
+```json
+{
+  "wage": 95000,
+  "structureId": 1
+}
+```
+- **Response**: `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "wage": 95000,
+    "summary": {
+      "gross": 95000,
+      "totalDeductions": 21100,
+      "net": 73900
+    },
+    "lines": [
+      { "sequence": 10, "code": "BASIC", "name": "Basic Salary", "amount": 0 },
+      { "sequence": 20, "code": "HRA", "name": "House Rent Allowance", "amount": 47500 },
+      { "sequence": 50, "code": "PF", "name": "Provident Fund", "amount": 11400 },
+      { "sequence": 60, "code": "PT", "name": "Professional Tax", "amount": 200 },
+      { "sequence": 70, "code": "TDS", "name": "Tax Deducted at Source", "amount": 9500 },
+      { "sequence": 80, "code": "TOTAL_DED", "name": "Total Deductions", "amount": 21100 },
+      { "sequence": 90, "code": "NET", "name": "Net Salary", "amount": 73900 }
+    ]
+  }
+}
+```
+
+### `POST /api/payroll-admin/bulk-action`
+- **Auth**: Bearer JWT (Admin, HR Payroll Admin)
+- **Request Body**:
+```json
+{
+  "action": "COMPUTE",
+  "payrunIds": [1, 2]
+}
+```
+
+---
+
+## 14. In-App User Notifications (`/api/notifications`)
+
+### `GET /api/notifications`
+- **Auth**: Bearer JWT
+- **Query Params**: `limit` (default 30), `unreadOnly` (true/false), `scope` ('all' for admin)
+- **Response**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Notifications retrieved successfully",
+  "data": {
+    "notifications": [
+      {
+        "id": 5,
+        "user_id": 1,
+        "title": "Work Schedule: sc123",
+        "message": "New working schedule (Full-Time - 48 hrs/week) configured.",
+        "type": "INFO",
+        "is_read": 0,
+        "link": "/working-schedules",
+        "created_at": "2026-09-05T22:21:53.000Z"
+      }
+    ],
+    "unreadCount": 1,
+    "total": 1
+  }
+}
+```
+
+### `PATCH /api/notifications/:id/read` (or `PUT`)
+- **Auth**: Bearer JWT
+- **Response**: `200 OK`
+- Marks a single notification as read.
+
+### `POST /api/notifications/mark-all-read` (or `PUT /read-all`)
+- **Auth**: Bearer JWT
+- **Response**: `200 OK`
+- Marks all unread notifications for current user as read.
+
+### `DELETE /api/notifications/:id`
+- **Auth**: Bearer JWT
+- **Response**: `200 OK`
+- Deletes a specific notification from user's feed.
+
