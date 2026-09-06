@@ -34,10 +34,10 @@ const SYSTEM_ROLES = [
   },
   {
     value: 'HR_PAYROLL_USER',
-    label: 'HR Payroll User (Payrun Processing Panel)',
-    panel: 'Payroll Processing Panel',
+    label: 'HR Payroll User (Payrun Processing & HR Panel)',
+    panel: 'HR & Payroll Processing Panel',
     badge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    desc: 'Payroll processing: Create/compute payruns, generate payslips, and manage attendance.'
+    desc: 'All HR Manager permissions plus create, read, and update access to Payruns & Payslips; read-only access to Salary Structures and Salary Rules.'
   },
   {
     value: 'ADMIN',
