@@ -38,6 +38,7 @@ router.use('/salary-rules', salaryRuleRoutes);
 router.use('/payruns', payrunRoutes);
 router.use('/payslips', payslipRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/admin/dashboard', dashboardRoutes);
 router.use('/upload', uploadRoutes);
 
 // Shortcut routes for Employee Self-Service portal
