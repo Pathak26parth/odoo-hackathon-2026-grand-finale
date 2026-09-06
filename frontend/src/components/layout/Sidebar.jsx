@@ -490,8 +490,10 @@ export const Sidebar = ({ isOpen, onClose }) => {
           <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
             <div className="flex items-center gap-2.5 min-w-0">
               <img
+                key={currentUser?.avatar || currentUser?.profilePhotoUrl || 'sidebar-avatar'}
                 src={
                   currentUser?.avatar ||
+                  currentUser?.profilePhotoUrl ||
                   'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
                 }
                 alt={currentUser?.name || 'User'}

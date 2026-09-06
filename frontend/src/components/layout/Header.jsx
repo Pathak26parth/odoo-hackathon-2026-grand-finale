@@ -60,8 +60,10 @@ export const Header = ({ onToggleSidebar, breadcrumbs = [] }) => {
             className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-100 transition-colors"
           >
             <img
+              key={currentUser?.avatar || currentUser?.profilePhotoUrl || 'header-avatar'}
               src={
                 currentUser?.avatar ||
+                currentUser?.profilePhotoUrl ||
                 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
               }
               alt={currentUser?.name || 'User'}

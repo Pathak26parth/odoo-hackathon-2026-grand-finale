@@ -29,6 +29,60 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
+  const updateCurrentUser = (partialUser) => {
+    if (!partialUser) return;
+    setCurrentUser((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...partialUser };
+      if (partialUser.profilePhotoUrl && !partialUser.avatar) {
+        updated.avatar = partialUser.profilePhotoUrl;
+      }
+      try {
+        localStorage.setItem(AUTH_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to sync current user in localStorage:', e);
+      }
+      return updated;
+    });
+  };
+
+  const refreshCurrentUser = async () => {
+    try {
+      const userData = await authService.getCurrentUser();
+      if (!userData) return null;
+      const normRole = normalizeRole(userData.role);
+      const photoUrl =
+        userData.employee?.profilePhotoUrl ||
+        userData.employee?.avatar ||
+        userData.profilePhotoUrl ||
+        userData.avatar;
+
+      const userObj = {
+        id: String(userData.id),
+        email: userData.email,
+        name: userData.employee ? `${userData.employee.firstName || ''} ${userData.employee.lastName || ''}`.trim() || userData.employee.fullName || userData.email.split('@')[0] : userData.email.split('@')[0],
+        role: normRole,
+        roleRaw: userData.role,
+        employeeId: userData.employee?.employeeCode || (userData.employee_id ? `EMP-${String(userData.employee_id).padStart(3, '0')}` : null),
+        internalEmployeeId: userData.employee?.id || userData.employee_id || null,
+        employeeName: userData.employee?.fullName || null,
+        department: userData.employee?.departmentName || 'General',
+        position: userData.employee?.jobPosition || normRole,
+        avatar: photoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+        profilePhotoUrl: photoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+        permissions: userData.permissions || [],
+        faceEnrollmentStatus: userData.employee?.faceEnrollmentStatus || 'NOT_ENROLLED'
+      };
+
+      setCurrentUser(userObj);
+      localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
+      return userObj;
+    } catch (err) {
+      console.warn('[Auth] Session refresh failed:', err.message);
+      return null;
+    }
+  };
+
   // Restore authenticated session from backend on mount
   useEffect(() => {
     const restoreSession = async () => {
@@ -41,6 +95,12 @@ export const AuthProvider = ({ children }) => {
       try {
         const userData = await authService.getCurrentUser();
         const normRole = normalizeRole(userData.role);
+        const photoUrl =
+          userData.employee?.profilePhotoUrl ||
+          userData.employee?.avatar ||
+          userData.profilePhotoUrl ||
+          userData.avatar;
+
         const userObj = {
           id: String(userData.id),
           email: userData.email,
@@ -52,7 +112,8 @@ export const AuthProvider = ({ children }) => {
           employeeName: userData.employee?.fullName || null,
           department: userData.employee?.departmentName || 'General',
           position: userData.employee?.jobPosition || normRole,
-          avatar: userData.employee?.profilePhotoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+          avatar: photoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+          profilePhotoUrl: photoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
           permissions: userData.permissions || [],
           faceEnrollmentStatus: userData.employee?.faceEnrollmentStatus || 'NOT_ENROLLED'
         };
@@ -82,8 +143,33 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
+    const handleUserUpdated = (e) => {
+      if (e.detail) {
+        updateCurrentUser(e.detail);
+      } else {
+        refreshCurrentUser();
+      }
+    };
+
+    const handleStorageChange = (e) => {
+      if (e.key === AUTH_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed) setCurrentUser(parsed);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
     window.addEventListener('auth:unauthorized', handleUnauthorized);
-    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    window.addEventListener('auth:user-updated', handleUserUpdated);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      window.removeEventListener('auth:user-updated', handleUserUpdated);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const login = async (email, password) => {
@@ -93,6 +179,7 @@ export const AuthProvider = ({ children }) => {
     const authData = await authService.login(trimmedEmail, password);
     const u = authData.user;
     const normRole = normalizeRole(u.role);
+    const photoUrl = u.profilePhotoUrl || u.avatar;
 
     const userObj = {
       id: String(u.id),
@@ -105,7 +192,8 @@ export const AuthProvider = ({ children }) => {
       employeeName: u.name || null,
       department: u.departmentName || 'General',
       position: u.jobPosition || normRole,
-      avatar: u.profilePhotoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+      avatar: photoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+      profilePhotoUrl: photoUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
       permissions: u.permissions || [],
       faceEnrollmentStatus: u.faceEnrollmentStatus || 'NOT_ENROLLED'
     };
@@ -203,7 +291,9 @@ export const AuthProvider = ({ children }) => {
         canAccessReports,
         canManageUsers,
         canRegisterFace,
-        isHRManager
+        isHRManager,
+        updateCurrentUser,
+        refreshCurrentUser
       }}
     >
       {children}

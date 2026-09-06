@@ -118,6 +118,7 @@ class AuthController {
           departmentId: user.department_id,
           departmentName: user.department_name,
           profilePhotoUrl: user.profile_photo_url,
+          avatar: user.profile_photo_url,
           mustChangePassword: !!user.must_change_password,
           permissions
         }
@@ -278,6 +279,8 @@ class AuthController {
         mustChangePassword: !!user.must_change_password,
         lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
+        profilePhotoUrl: user.profile_photo_url,
+        avatar: user.profile_photo_url,
         employee: user.employee_id ? {
           id: user.employee_id,
           employeeCode: user.employee_code,
@@ -295,6 +298,7 @@ class AuthController {
           joiningDate: user.joining_date,
           status: user.employee_status,
           profilePhotoUrl: user.profile_photo_url,
+          avatar: user.profile_photo_url,
           faceEnrollmentStatus: user.face_enrollment_status || 'NOT_ENROLLED'
         } : null,
         permissions: req.user.permissions

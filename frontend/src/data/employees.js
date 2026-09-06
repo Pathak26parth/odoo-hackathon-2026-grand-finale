@@ -95,13 +95,19 @@ export const updateEmployee = async (id, data) => {
       const userRaw = localStorage.getItem('peoplepay360_current_user');
       if (userRaw) {
         const u = JSON.parse(userRaw);
-        if (
+        const isTargetUser =
           String(u.internalEmployeeId) === String(id) ||
           u.employeeId === id ||
-          (data.email && u.email === data.email)
-        ) {
-          if (updatedEmp.avatar) {
-            u.avatar = updatedEmp.avatar;
+          (data.email && u.email?.toLowerCase() === data.email?.toLowerCase()) ||
+          (updatedEmp?.email && u.email?.toLowerCase() === updatedEmp.email?.toLowerCase()) ||
+          (updatedEmp?.id && String(u.internalEmployeeId) === String(updatedEmp.id)) ||
+          (updatedEmp?.employeeId && u.employeeId === updatedEmp.employeeId);
+
+        if (isTargetUser) {
+          const newAvatar = updatedEmp?.profilePhotoUrl || updatedEmp?.avatar || data.profilePhotoUrl || data.avatar;
+          if (newAvatar) {
+            u.avatar = newAvatar;
+            u.profilePhotoUrl = newAvatar;
           }
           if (updatedEmp.name) {
             u.name = updatedEmp.name;
@@ -120,6 +126,7 @@ export const updateEmployee = async (id, data) => {
             u.department = updatedEmp.department || updatedEmp.departmentName;
           }
           localStorage.setItem('peoplepay360_current_user', JSON.stringify(u));
+          window.dispatchEvent(new CustomEvent('auth:user-updated', { detail: u }));
         }
       }
     } catch (e) {

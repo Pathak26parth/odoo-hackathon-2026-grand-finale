@@ -55,25 +55,9 @@ export const EmployeeDetail = () => {
   const initialRoleParam = searchParams.get('role');
   const isHrParam = initialRoleParam === 'HR_MANAGER' || initialRoleParam === 'hr_manager' || initialRoleParam === 'hr';
 
-  const { currentUser, isEmployeeOnly, isHRorAdmin, role } = useAuth();
+  const { currentUser, isEmployeeOnly, isHRorAdmin, role, updateCurrentUser, refreshCurrentUser } = useAuth();
   const isCreate = !id || id === 'new';
   const isAdmin = role === 'Admin' || currentUser?.role === 'ADMIN' || currentUser?.role === 'Admin';
-
-  // If a non-admin / non-HR employee tries to create a new employee, bounce them to their own profile
-  if (isCreate && isEmployeeOnly) {
-    const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
-    return <Navigate to={`/employees/${ownId}`} replace />;
-  }
-
-  // HR Managers cannot assign or create System Administrator accounts
-  const allowedRoles = SYSTEM_ROLES.filter((r) => {
-    if (r.value === 'ADMIN') {
-      return isAdmin;
-    }
-    return true;
-  });
-
-  const fileInputRef = useRef(null);
 
   const [isEditing, setIsEditing] = useState(isCreate);
   const [employee, setEmployee] = useState(null);
@@ -99,6 +83,34 @@ export const EmployeeDetail = () => {
     status: 'Active'
   });
 
+  const isSelf =
+    Boolean(currentUser) &&
+    (
+      String(currentUser.internalEmployeeId) === String(id) ||
+      String(currentUser.internalEmployeeId) === String(employee?.id) ||
+      String(currentUser.internalEmployeeId) === String(employee?.internalId) ||
+      currentUser.employeeId === id ||
+      currentUser.employeeId === employee?.employeeId ||
+      (employee?.email && currentUser.email?.toLowerCase() === employee.email?.toLowerCase()) ||
+      (formData.email && currentUser.email?.toLowerCase() === formData.email?.toLowerCase())
+    );
+
+  // If a non-admin / non-HR employee tries to create a new employee, bounce them to their own profile
+  if (isCreate && isEmployeeOnly) {
+    const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
+    return <Navigate to={`/employees/${ownId}`} replace />;
+  }
+
+  // HR Managers cannot assign or create System Administrator accounts
+  const allowedRoles = SYSTEM_ROLES.filter((r) => {
+    if (r.value === 'ADMIN') {
+      return isAdmin;
+    }
+    return true;
+  });
+
+  const fileInputRef = useRef(null);
+
   const handlePhotoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -114,7 +126,7 @@ export const EmployeeDetail = () => {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64Data = event.target?.result;
       if (base64Data) {
         setFormData((prev) => ({
@@ -122,6 +134,32 @@ export const EmployeeDetail = () => {
           avatar: base64Data,
           profilePhotoUrl: base64Data
         }));
+
+        // Immediately update preview in Header and Sidebar if this is the user's own profile
+        if (isSelf && updateCurrentUser) {
+          updateCurrentUser({ avatar: base64Data, profilePhotoUrl: base64Data });
+        }
+
+        // If editing existing employee, upload directly to backend
+        const targetId = employee?.id || id;
+        if (!isCreate && targetId && targetId !== 'new') {
+          try {
+            const uploadRes = await employeeService.uploadEmployeePhoto(targetId, file);
+            const uploadedUrl = uploadRes?.data?.profilePhotoUrl || uploadRes?.profilePhotoUrl || uploadRes?.avatar;
+            if (uploadedUrl) {
+              setFormData((prev) => ({
+                ...prev,
+                avatar: uploadedUrl,
+                profilePhotoUrl: uploadedUrl
+              }));
+              if (isSelf && updateCurrentUser) {
+                updateCurrentUser({ avatar: uploadedUrl, profilePhotoUrl: uploadedUrl });
+              }
+            }
+          } catch (uploadErr) {
+            console.warn('[EmployeeDetail] Direct photo upload fallback to form submit:', uploadErr.message);
+          }
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -135,6 +173,9 @@ export const EmployeeDetail = () => {
     }));
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (isSelf && updateCurrentUser) {
+      updateCurrentUser({ avatar: DEFAULT_PHOTO, profilePhotoUrl: DEFAULT_PHOTO });
     }
   };
 
@@ -157,6 +198,23 @@ export const EmployeeDetail = () => {
       schedule: existing.schedule || existing.schedule_name || 'Standard Full-Time (40h/week)',
       status: (existing.status || 'Active').toUpperCase() === 'ACTIVE' ? 'Active' : (existing.status || 'Inactive')
     });
+
+    // If viewing own profile and DB photo is set, ensure currentUser avatar is synchronized
+    const isTargetUser =
+      Boolean(currentUser) &&
+      (
+        String(currentUser.internalEmployeeId) === String(existing.id) ||
+        String(currentUser.internalEmployeeId) === String(existing.internalId) ||
+        currentUser.employeeId === existing.employeeId ||
+        currentUser.employeeId === existing.employee_code ||
+        (existing.email && currentUser.email?.toLowerCase() === existing.email?.toLowerCase())
+      );
+
+    if (isTargetUser && resolvedPhoto && resolvedPhoto !== DEFAULT_PHOTO && updateCurrentUser) {
+      if (currentUser.avatar !== resolvedPhoto) {
+        updateCurrentUser({ avatar: resolvedPhoto, profilePhotoUrl: resolvedPhoto });
+      }
+    }
   };
 
   useEffect(() => {
@@ -224,6 +282,20 @@ export const EmployeeDetail = () => {
         const updated = await updateEmployee(id, formData);
         if (updated) {
           populateForm(updated);
+          if (isSelf) {
+            const finalAvatar = updated.profilePhotoUrl || updated.avatar || formData.profilePhotoUrl || formData.avatar;
+            if (updateCurrentUser) {
+              updateCurrentUser({
+                avatar: finalAvatar,
+                profilePhotoUrl: finalAvatar,
+                name: updated.name || `${formData.firstName} ${formData.lastName}`.trim(),
+                email: updated.email || formData.email
+              });
+            }
+            if (refreshCurrentUser) {
+              refreshCurrentUser();
+            }
+          }
         }
         setToastMessage('Employee details updated successfully!');
       }
