@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   DollarSign,
   FileCheck2,
@@ -6,8 +7,10 @@ import {
   CalendarCheck,
   HeartPulse,
   RotateCw,
-  AlertTriangle
+  AlertTriangle,
+  Sliders
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import dashboardService from '../../services/dashboardService';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
@@ -20,24 +23,27 @@ import { PayrollAlerts } from '../../components/dashboard/PayrollAlerts';
 import { DepartmentBreakdown } from '../../components/dashboard/DepartmentBreakdown';
 
 export const Dashboard = () => {
+  const { role, currentUser } = useAuth();
+  const isPayrollAdminOrAdmin =
+    role === 'Admin' ||
+    role === 'HR Payroll Manager' ||
+    role === 'HR Payroll Admin' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
   // Global Filters
   const [periodFilter, setPeriodFilter] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState('All');
 
-  // Dynamic Options (Populated from live DB records)
+  // Dynamic Options (Populated from live DB records via /api/dashboard response)
   const [availablePeriods, setAvailablePeriods] = useState([
-    { key: 'All', label: 'All Periods' },
-    { key: '2026-09', label: 'September 2026' },
-    { key: '2026-08', label: 'August 2026' }
+    { key: 'All', label: 'All Periods' }
   ]);
   const [availableDepartments, setAvailableDepartments] = useState([
     { id: 'All', name: 'All Departments' }
   ]);
   const [availableTypes, setAvailableTypes] = useState([
-    { id: 'All', name: 'All Types' },
-    { id: 'Full-Time', name: 'Full-Time (Standard)' },
-    { id: 'Contractor', name: 'Contractor / Part-Time' }
+    { id: 'All', name: 'All Types' }
   ]);
 
   // Dashboard Data State
@@ -84,7 +90,7 @@ export const Dashboard = () => {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // 1. KPI Metrics
+  // 1. KPI Metrics — all from backend response, zero hardcoded values
   const totalNetPaid = dashboardData?.kpi?.totalNetSalaryPaid || 0;
   const salaryGrowthTrend = dashboardData?.kpi?.salaryGrowth || '+0.0%';
   const payslipsCount = dashboardData?.kpi?.payslipsGenerated ?? 0;
@@ -172,70 +178,82 @@ export const Dashboard = () => {
           </p>
         </div>
 
-        {/* Dynamic Filters Bar */}
-        <div className="flex flex-wrap items-center gap-2 text-xs bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
-          {/* Period Filter */}
-          <div className="flex items-center gap-1.5 px-1">
-            <span className="text-slate-400 font-semibold text-[11px] uppercase">Period:</span>
-            <select
-              value={periodFilter}
-              onChange={(e) => setPeriodFilter(e.target.value)}
-              className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        {/* Dynamic Filters & Action Links */}
+        <div className="flex flex-wrap items-center gap-3">
+          {isPayrollAdminOrAdmin && (
+            <Link
+              to="/payroll/admin-panel"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-2xs transition-all transform hover:-translate-y-0.5"
             >
-              {availablePeriods.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Payroll Admin Panel</span>
+            </Link>
+          )}
 
-          <div className="h-4 w-px bg-slate-200" />
+          <div className="flex flex-wrap items-center gap-2 text-xs bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+            {/* Period Filter */}
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-slate-400 font-semibold text-[11px] uppercase">Period:</span>
+              <select
+                value={periodFilter}
+                onChange={(e) => setPeriodFilter(e.target.value)}
+                className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                {availablePeriods.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Department Filter */}
-          <div className="flex items-center gap-1.5 px-1">
-            <span className="text-slate-400 font-semibold text-[11px] uppercase">Dept:</span>
-            <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            <div className="h-4 w-px bg-slate-200" />
+
+            {/* Department Filter */}
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-slate-400 font-semibold text-[11px] uppercase">Dept:</span>
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                {availableDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="h-4 w-px bg-slate-200" />
+
+            {/* Type Filter */}
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-slate-400 font-semibold text-[11px] uppercase">Type:</span>
+              <select
+                value={employeeTypeFilter}
+                onChange={(e) => setEmployeeTypeFilter(e.target.value)}
+                className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                {availableTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Refresh Action */}
+            <button
+              type="button"
+              onClick={loadDashboardData}
+              disabled={loading}
+              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+              title="Refresh metrics from database"
             >
-              {availableDepartments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+              <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
           </div>
-
-          <div className="h-4 w-px bg-slate-200" />
-
-          {/* Type Filter */}
-          <div className="flex items-center gap-1.5 px-1">
-            <span className="text-slate-400 font-semibold text-[11px] uppercase">Type:</span>
-            <select
-              value={employeeTypeFilter}
-              onChange={(e) => setEmployeeTypeFilter(e.target.value)}
-              className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              {availableTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Refresh Action */}
-          <button
-            type="button"
-            onClick={loadDashboardData}
-            disabled={loading}
-            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-            title="Refresh metrics from database"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
-          </button>
         </div>
       </div>
 

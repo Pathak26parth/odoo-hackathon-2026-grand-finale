@@ -20,9 +20,11 @@ export const Contracts = () => {
     currentUser?.role === 'Admin' ||
     currentUser?.role === 'HR Manager' ||
     currentUser?.role === 'HR Payroll Manager' ||
+    currentUser?.role === 'HR Payroll User' ||
     currentUser?.roleRaw === 'ADMIN' ||
     currentUser?.roleRaw === 'HR_MANAGER' ||
-    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_USER';
   const isEmployeeOnly = !isManagerOrAdmin;
 
   const [contracts, setContracts] = useState([]);

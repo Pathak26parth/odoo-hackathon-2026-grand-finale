@@ -29,9 +29,11 @@ export const FaceCheckIn = () => {
     currentUser?.role === 'Admin' ||
     currentUser?.role === 'HR Manager' ||
     currentUser?.role === 'HR Payroll Manager' ||
+    currentUser?.role === 'HR Payroll User' ||
     currentUser?.roleRaw === 'ADMIN' ||
     currentUser?.roleRaw === 'HR_MANAGER' ||
-    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_USER';
 
   const selfEmployeeCode =
     currentUser?.employeeId ||
@@ -126,9 +128,11 @@ export const FaceCheckIn = () => {
         currentUser?.role === 'Admin' ||
         currentUser?.role === 'HR Manager' ||
         currentUser?.role === 'HR Payroll Manager' ||
+        currentUser?.role === 'HR Payroll User' ||
         currentUser?.roleRaw === 'ADMIN' ||
         currentUser?.roleRaw === 'HR_MANAGER' ||
-        currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+        currentUser?.roleRaw === 'HR_PAYROLL_ADMIN' ||
+        currentUser?.roleRaw === 'HR_PAYROLL_USER';
 
       if (!isPrivileged) {
         // Strict Boundary: Regular employee can only see and punch for themselves
@@ -193,9 +197,11 @@ export const FaceCheckIn = () => {
       currentUser?.role === 'Admin' ||
       currentUser?.role === 'HR Manager' ||
       currentUser?.role === 'HR Payroll Manager' ||
+      currentUser?.role === 'HR Payroll User' ||
       currentUser?.roleRaw === 'ADMIN' ||
       currentUser?.roleRaw === 'HR_MANAGER' ||
-      currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+      currentUser?.roleRaw === 'HR_PAYROLL_ADMIN' ||
+      currentUser?.roleRaw === 'HR_PAYROLL_USER';
 
     const selfCode = currentUser?.employeeId || employees[0]?.employeeId || 'EMP-001';
     const targetCode = isPrivileged

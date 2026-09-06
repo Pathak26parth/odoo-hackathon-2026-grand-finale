@@ -14,6 +14,7 @@ const payrunRoutes = require('./payrunRoutes');
 const payslipRoutes = require('./payslipRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const uploadRoutes = require('./uploadRoutes');
+const payrollAdminRoutes = require('./payrollAdminRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -39,6 +40,7 @@ router.use('/payruns', payrunRoutes);
 router.use('/payslips', payslipRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/admin/dashboard', dashboardRoutes);
+router.use('/payroll-admin', payrollAdminRoutes);
 router.use('/upload', uploadRoutes);
 
 // Shortcut routes for Employee Self-Service portal

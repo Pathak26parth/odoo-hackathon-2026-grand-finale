@@ -213,12 +213,12 @@ export const UserForm = () => {
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold"
               >
-                <option value="Employee">Employee</option>
-                <option value="HR Manager">HR Manager</option>
-                <option value="HR Payroll User">HR Payroll User</option>
-                <option value="HR Payroll Admin">HR Payroll Admin</option>
-                <option value="HR Payroll Manager">HR Payroll Manager</option>
-                <option value="Admin">Admin</option>
+                <option value="Employee">Employee (Self-Service Portal)</option>
+                <option value="HR Manager">HR Manager (HR Operations Hub)</option>
+                <option value="HR Payroll User">HR Payroll User (Payrun Processing)</option>
+                <option value="HR Payroll Admin">HR Payroll Admin (Dedicated Payroll Admin Panel)</option>
+                <option value="HR Payroll Manager">HR Payroll Manager (Dedicated Payroll Admin Panel)</option>
+                <option value="Admin">Admin (System Administrator)</option>
               </select>
               {errors.role && (
                 <p className="mt-1 text-[11px] text-rose-600 flex items-center gap-1">

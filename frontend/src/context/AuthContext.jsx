@@ -164,17 +164,18 @@ export const AuthProvider = ({ children }) => {
     role === 'HR Payroll Manager';
 
   const isEmployeeOnly = role === 'Employee';
-  const canApproveTimeOff = role === 'Admin' || role === 'HR Manager' || can('timeoff.approve');
-  const canManageAllocations = role === 'Admin' || role === 'HR Manager' || can('timeoff.allocations_manage');
-  const canManageTimeOffTypes = role === 'Admin' || role === 'HR Manager' || can('timeoff.types_manage');
+  const isHRPayrollUser = role === 'HR Payroll User' || currentUser?.roleRaw === 'HR_PAYROLL_USER';
+  const canApproveTimeOff = role === 'Admin' || role === 'HR Manager' || role === 'HR Payroll Manager' || isHRPayrollUser || can('timeoff.approve');
+  const canManageAllocations = role === 'Admin' || role === 'HR Manager' || role === 'HR Payroll Manager' || isHRPayrollUser || can('timeoff.allocations_manage');
+  const canManageTimeOffTypes = role === 'Admin' || role === 'HR Manager' || role === 'HR Payroll Manager' || isHRPayrollUser || can('timeoff.types_manage');
 
   // Payroll Configuration permissions
   const canViewPayrollConfig =
-    role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Payroll User' || can('payroll.read');
+    role === 'Admin' || role === 'HR Payroll Manager' || isHRPayrollUser || can('payroll.read');
   const canManagePayrollConfig =
     role === 'Admin' || role === 'HR Payroll Manager' || can('salary_rules.manage');
-  const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || can('dashboard.read');
-  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || can('reports.read') || can('dashboard.read');
+  const canAccessDashboard = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || isHRPayrollUser || can('dashboard.read');
+  const canAccessReports = role === 'Admin' || role === 'HR Payroll Manager' || role === 'HR Manager' || isHRPayrollUser || can('reports.read') || can('dashboard.read');
   const canManageUsers = role === 'Admin' || can('users.manage') || can('users.create');
   const canRegisterFace = isHRorAdmin;
   const isHRManager = role === 'HR Manager' || currentUser?.roleRaw === 'HR_MANAGER';
