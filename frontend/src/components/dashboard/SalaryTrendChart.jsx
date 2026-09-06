@@ -3,9 +3,9 @@ import React from 'react';
 import { formatCurrency } from '../../utils/payrollCalculation';
 
 export const SalaryTrendChart = ({ monthlyData = [] }) => {
-  const points = monthlyData;
+  const points = Array.isArray(monthlyData) ? monthlyData : [];
 
-  if (!points || points.length < 2) {
+  if (!points || points.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -21,11 +21,21 @@ export const SalaryTrendChart = ({ monthlyData = [] }) => {
     );
   }
 
-  const minNet = Math.min(...points.map((p) => p.net)) * 0.95;
-  const maxNet = Math.max(...points.map((p) => p.net)) * 1.05;
+  // Handle single-point graph gracefully by creating baseline
+  const renderPoints = points.length === 1
+    ? [
+        { month_key: 'start', month: 'Prior', net: points[0].net * 0.95 },
+        { ...points[0] }
+      ]
+    : points;
+
+  const minNet = Math.min(...renderPoints.map((p) => p.net)) * 0.9;
+  const maxNet = Math.max(...renderPoints.map((p) => p.net)) * 1.1;
   const firstNet = points[0]?.net || 1;
   const lastNet = points[points.length - 1]?.net || 0;
-  const growthPct = firstNet > 0 ? (((lastNet - firstNet) / firstNet) * 100).toFixed(1) : '0';
+  const growthPct = points.length > 1 && firstNet > 0
+    ? (((lastNet - firstNet) / firstNet) * 100).toFixed(1)
+    : '0.0';
 
   // SVG dimensions
   const svgWidth = 500;
@@ -34,7 +44,7 @@ export const SalaryTrendChart = ({ monthlyData = [] }) => {
   const paddingY = 25;
 
   const getCoordinates = (index, value) => {
-    const x = paddingX + (index / (points.length - 1)) * (svgWidth - 2 * paddingX);
+    const x = paddingX + (index / (renderPoints.length - 1 || 1)) * (svgWidth - 2 * paddingX);
     const y =
       svgHeight -
       paddingY -
@@ -42,7 +52,7 @@ export const SalaryTrendChart = ({ monthlyData = [] }) => {
     return { x, y };
   };
 
-  const coords = points.map((p, i) => getCoordinates(i, p.net));
+  const coords = renderPoints.map((p, i) => getCoordinates(i, p.net));
   const pathD = coords.reduce(
     (acc, c, i) => (i === 0 ? `M ${c.x} ${c.y}` : `${acc} L ${c.x} ${c.y}`),
     ''
@@ -57,7 +67,9 @@ export const SalaryTrendChart = ({ monthlyData = [] }) => {
       <div className="flex items-center justify-between pb-2 border-b border-slate-100">
         <div>
           <h3 className="text-sm font-bold text-slate-900">Monthly Net Salary Trend</h3>
-          <p className="text-xs text-slate-500">Net payroll disbursement trajectory ({points[0]?.month} — {points[points.length - 1]?.month})</p>
+          <p className="text-xs text-slate-500">
+            Net payroll disbursement trajectory ({points[0]?.month}{points.length > 1 ? ` — ${points[points.length - 1]?.month}` : ''})
+          </p>
         </div>
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
           Number(growthPct) >= 0 

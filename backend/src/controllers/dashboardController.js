@@ -477,29 +477,68 @@ class DashboardController {
       `);
       const [leaveBalanceResult] = await query('SELECT COALESCE(SUM(remaining_days), 0) AS total_balance FROM time_off_allocations WHERE status = "APPROVED"');
 
+      const attendancePayload = {
+        present: onTimePunches,
+        presentOnTime: onTimePunches,
+        late: parseInt(attResult.late_count, 10) || 0,
+        lateArrivals: parseInt(attResult.late_count, 10) || 0,
+        absent: parseInt(attResult.absent_count, 10) || 0,
+        absentCount: parseInt(attResult.absent_count, 10) || 0,
+        halfDays: parseInt(attResult.half_day_count, 10) || 0,
+        missingCheckouts: parseInt(attResult.missing_checkouts, 10) || 0,
+        manualEdits: parseInt(attResult.manual_edits, 10) || 0,
+        manualCorrections: parseInt(attResult.manual_edits, 10) || 0,
+        overtime: parseFloat(attResult.total_overtime_hours) || 0.0,
+        totalOvertimeHours: parseFloat(attResult.total_overtime_hours) || 0.0,
+        faceRecognitionCheckins: parseInt(faceCheckinResult?.count, 10) || 0,
+        totalEntries: totalPunches,
+        coverage: attendanceHealthScore
+      };
+
+      const timeOffPayload = {
+        approvedDays: parseFloat(timeOffStats.approved_days) || 0,
+        pendingRequests: parseInt(timeOffStats.pending_requests, 10) || 0,
+        refusedRequests: parseInt(timeOffStats.refused_requests, 10) || 0,
+        remainingBalance: parseFloat(leaveBalanceResult.total_balance) || 0
+      };
+
+      const kpiPayload = {
+        totalNetSalaryPaid: currentTotalNet,
+        salaryGrowth: salaryGrowthFormatted,
+        salaryGrowthValue: salaryGrowth,
+        payslipsGenerated: payslipsCount,
+        averageSalary: Math.round(averageSalary),
+        approvedLeaveDays: approvedLeaveDays,
+        attendanceHealthScore: attendanceHealthScore,
+        attendanceHealthStatus: attendanceHealthStatus
+      };
+
+      const filtersPayload = {
+        periods: periodOptions,
+        departments: departmentOptions,
+        types: typeOptions,
+        selected: {
+          period: normPeriod || 'All',
+          departmentId: departmentId || 'All',
+          type: type || 'All'
+        }
+      };
+
+      const alertsPayload = {
+        missingBankDetails: parseInt(missingBankCount?.count, 10) || 0,
+        missingActiveContracts: parseInt(missingContractCount?.count, 10) || 0,
+        pendingTimeOffRequests: parseInt(pendingLeaveCount?.count, 10) || 0
+      };
+
       return sendSuccess(res, 'Live dashboard metrics calculated', {
-        filters: {
-          periods: periodOptions,
-          departments: departmentOptions,
-          types: typeOptions,
-          selected: {
-            period: normPeriod || 'All',
-            departmentId: departmentId || 'All',
-            type: type || 'All'
-          }
-        },
-        kpi: {
-          totalNetSalaryPaid: currentTotalNet,
-          salaryGrowth: salaryGrowthFormatted,
-          salaryGrowthValue: salaryGrowth,
-          payslipsGenerated: payslipsCount,
-          averageSalary: Math.round(averageSalary),
-          approvedLeaveDays: approvedLeaveDays,
-          attendanceHealthScore: attendanceHealthScore,
-          attendanceHealthStatus: attendanceHealthStatus
-        },
+        filters: filtersPayload,
+        filterOptions: filtersPayload,
+        kpi: kpiPayload,
+        kpis: kpiPayload,
         payruns: payrunCounts,
+        payrollStatus: payrunCounts,
         salaryByDepartment,
+        salaryDepartment: salaryByDepartment,
         monthlyTrends: monthlyTrends.map(m => ({
           month_key: m.month_key,
           month: m.month,
@@ -508,29 +547,11 @@ class DashboardController {
           payslips_count: parseInt(m.payslips_count, 10) || 0
         })),
         departmentBreakdown,
-        attendanceOverview: {
-          totalEntries: totalPunches,
-          presentOnTime: onTimePunches,
-          lateArrivals: parseInt(attResult.late_count, 10) || 0,
-          absentCount: parseInt(attResult.absent_count, 10) || 0,
-          halfDays: parseInt(attResult.half_day_count, 10) || 0,
-          missingCheckouts: parseInt(attResult.missing_checkouts, 10) || 0,
-          manualCorrections: parseInt(attResult.manual_edits, 10) || 0,
-          totalOvertimeHours: parseFloat(attResult.total_overtime_hours) || 0.0,
-          faceRecognitionCheckins: parseInt(faceCheckinResult?.count, 10) || 0,
-          coverage: attendanceHealthScore
-        },
-        timeOffOverview: {
-          approvedDays: parseFloat(timeOffStats.approved_days) || 0,
-          pendingRequests: parseInt(timeOffStats.pending_requests, 10) || 0,
-          refusedRequests: parseInt(timeOffStats.refused_requests, 10) || 0,
-          remainingBalance: parseFloat(leaveBalanceResult.total_balance) || 0
-        },
-        alerts: {
-          missingBankDetails: parseInt(missingBankCount?.count, 10) || 0,
-          missingActiveContracts: parseInt(missingContractCount?.count, 10) || 0,
-          pendingTimeOffRequests: parseInt(pendingLeaveCount?.count, 10) || 0
-        }
+        attendanceOverview: attendancePayload,
+        attendanceStats: attendancePayload,
+        timeOffOverview: timeOffPayload,
+        timeOffStats: timeOffPayload,
+        alerts: alertsPayload
       });
     } catch (error) {
       next(error);

@@ -69,11 +69,20 @@ export const Reports = () => {
     ...new Set(payslips.map((s) => s.period).filter(Boolean))
   ].sort();
 
-  // Filtered dataset
+  // Filtered dataset with Type filtering
+  const getEmpScheduleType = (empId) => {
+    const emp = employees.find((e) => String(e.id) === String(empId));
+    if (!emp) return 'Full-Time';
+    const raw = (emp.scheduleType || emp.workingSchedule?.type || emp.working_schedule_type || emp.jobPosition || '').toLowerCase();
+    if (raw.includes('contract') || raw.includes('part_time') || raw.includes('flexible')) return 'Contractor';
+    return 'Full-Time';
+  };
+
   const filteredPayslips = payslips.filter((s) => {
     const matchDept = departmentFilter === 'All' || s.department === departmentFilter;
     const matchPeriod = periodFilter === 'All' || s.period === periodFilter;
-    return matchDept && matchPeriod;
+    const matchType = employeeTypeFilter === 'All' || getEmpScheduleType(s.employeeId) === employeeTypeFilter;
+    return matchDept && matchPeriod && matchType;
   });
 
   const totalGross = filteredPayslips.reduce((acc, s) => acc + (Number(s.gross) || 0), 0);
@@ -84,7 +93,8 @@ export const Reports = () => {
   // Attendance metrics
   const filteredAttendance = attendance.filter((a) => {
     const matchDept = departmentFilter === 'All' || a.department === departmentFilter;
-    return matchDept;
+    const matchType = employeeTypeFilter === 'All' || getEmpScheduleType(a.employeeId) === employeeTypeFilter;
+    return matchDept && matchType;
   });
   const presentCount = filteredAttendance.filter((a) => a.status === 'Present').length;
   const lateCount = filteredAttendance.filter((a) => a.status === 'Late').length;
@@ -96,7 +106,8 @@ export const Reports = () => {
   // Time off metrics
   const filteredTimeOff = timeOff.filter((t) => {
     const matchDept = departmentFilter === 'All' || t.department === departmentFilter;
-    return matchDept;
+    const matchType = employeeTypeFilter === 'All' || getEmpScheduleType(t.employeeId) === employeeTypeFilter;
+    return matchDept && matchType;
   });
   const approvedLeaves = filteredTimeOff.filter((t) => t.status === 'Approved');
   const pendingLeaves = filteredTimeOff.filter((t) => t.status === 'Pending').length;
