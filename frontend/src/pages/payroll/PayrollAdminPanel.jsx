@@ -184,9 +184,15 @@ export const PayrollAdminPanel = () => {
                 onChange={(e) => setPeriod(e.target.value)}
                 className="bg-transparent font-bold text-white focus:outline-none cursor-pointer"
               >
-                <option value="2026-09" className="text-slate-900 font-semibold">September 2026</option>
-                <option value="2026-08" className="text-slate-900 font-semibold">August 2026</option>
-                <option value="2026-10" className="text-slate-900 font-semibold">October 2026 (Draft)</option>
+                {overview?.availablePeriods && overview.availablePeriods.length > 0 ? (
+                  overview.availablePeriods.map((p) => (
+                    <option key={p.period} value={p.period} className="text-slate-900 font-semibold">
+                      {p.displayLabel || p.label}
+                    </option>
+                  ))
+                ) : (
+                  <option value="2026-09" className="text-slate-900 font-semibold">September 2026</option>
+                )}
               </select>
             </div>
 
@@ -199,19 +205,111 @@ export const PayrollAdminPanel = () => {
               Refresh
             </button>
 
-            <button
-              onClick={() => navigate('/payroll/payruns/new')}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-blue-500 hover:bg-blue-400 text-white shadow-md shadow-blue-500/25 transition-all transform hover:-translate-y-0.5"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              Launch Payrun Wizard
-            </button>
+            {/* Dynamic Contextual Action Button based on currentPeriodPayrun */}
+            {(() => {
+              const currentRun = overview?.currentPeriodPayrun;
+              if (currentRun?.status === 'PAID') {
+                return (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigate(`/payroll/payruns/${currentRun.id}`)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/25 transition-all transform hover:-translate-y-0.5"
+                      title="View Finalized Payrun Details"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Cycle Completed (Payrun #{currentRun.id})
+                    </button>
+                    <button
+                      onClick={() => navigate('/payroll/payruns/new')}
+                      className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/20 transition-colors"
+                      title="Launch Supplemental Off-Cycle Batch"
+                    >
+                      + New Payrun
+                    </button>
+                  </div>
+                );
+              }
+
+              if (currentRun?.status === 'VALIDATED') {
+                return (
+                  <button
+                    onClick={() => navigate(`/payroll/payruns/${currentRun.id}`)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white shadow-md shadow-emerald-500/25 transition-all transform hover:-translate-y-0.5"
+                  >
+                    <DollarSign className="w-3.5 h-3.5" />
+                    Disburse &amp; Mark Paid (Payrun #{currentRun.id})
+                  </button>
+                );
+              }
+
+              if (currentRun?.status === 'COMPUTED') {
+                return (
+                  <button
+                    onClick={() => navigate(`/payroll/payruns/${currentRun.id}`)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white shadow-md shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    Audit &amp; Validate (Payrun #{currentRun.id})
+                  </button>
+                );
+              }
+
+              if (currentRun?.status === 'DRAFT') {
+                return (
+                  <button
+                    onClick={() => navigate(`/payroll/payruns/${currentRun.id}`)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-400 text-white shadow-md shadow-amber-500/25 transition-all transform hover:-translate-y-0.5"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Resume Payrun #{currentRun.id} (Draft)
+                  </button>
+                );
+              }
+
+              return (
+                <button
+                  onClick={() => navigate(`/payroll/payruns/new`)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-blue-500 hover:bg-blue-400 text-white shadow-md shadow-blue-500/25 transition-all transform hover:-translate-y-0.5"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  Launch Payrun Wizard
+                </button>
+              );
+            })()}
           </div>
         </div>
 
         {/* Subtle Decorative Background Glow */}
         <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
       </div>
+
+      {/* FINALIZED CYCLE COMPLETION BANNER */}
+      {overview?.currentPeriodPayrun?.status === 'PAID' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-white border border-emerald-200 text-xs shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-emerald-950 text-sm">
+                Payroll Cycle Finalized &amp; Disbursed for {period}
+              </h4>
+              <p className="text-emerald-800 text-[11px] mt-0.5">
+                Batch #{overview.currentPeriodPayrun.id} ({overview.currentPeriodPayrun.name}) has been validated and disbursed to {overview.currentPeriodPayrun.employee_count} employees. Net disbursement: {formatCurrency(overview.currentPeriodPayrun.total_net)}.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => navigate(`/payroll/payruns/${overview.currentPeriodPayrun.id}`)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              View Batch #{overview.currentPeriodPayrun.id}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* PRE-PAYROLL COMPLIANCE AUDIT ENGINE CARD */}
       <div className={`p-5 sm:p-6 rounded-2xl border transition-all ${getScoreBg(compliance?.readinessScore ?? 100)} shadow-xs`}>
@@ -228,7 +326,7 @@ export const PayrollAdminPanel = () => {
                   Pre-Payroll Compliance &amp; Readiness Health
                 </h2>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                  compliance?.readinessScore >= 90
+                  compliance?.status === 'FINALIZED' || compliance?.readinessScore >= 90
                     ? 'bg-emerald-100 text-emerald-800'
                     : compliance?.readinessScore >= 70
                     ? 'bg-amber-100 text-amber-800'
@@ -238,7 +336,9 @@ export const PayrollAdminPanel = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                {compliance?.summary?.isPayrunReady
+                {compliance?.summary?.message
+                  ? compliance.summary.message
+                  : compliance?.summary?.isPayrunReady
                   ? 'All active workforce profiles, bank accounts, and employment contracts are verified. Zero execution blockers.'
                   : `Attention: ${compliance?.summary?.blockerCount || 0} critical blocker(s) and ${compliance?.summary?.warningCount || 0} warning(s) detected that may impact salary calculations.`}
               </p>

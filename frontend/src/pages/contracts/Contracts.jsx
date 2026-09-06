@@ -171,29 +171,48 @@ export const Contracts = () => {
       header: 'Actions',
       key: 'actions',
       align: 'right',
-      render: (row) => (
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            type="button"
-            onClick={() => navigate(`/contracts/${row.id}`)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
-            title="View Details"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>View</span>
-          </button>
-          {!isEmployeeOnly && (
+      render: (row) => {
+        const isSystemAdminContract =
+          row.employeeName === 'System Administrator' ||
+          row.employeeCode === 'EMP-001' ||
+          row.employeeId === 1 ||
+          row.employeeId === 'EMP-001' ||
+          row.internalEmployeeId === 1 ||
+          String(row.id) === '1' ||
+          row.id === 'CON-EMP-001-2024' ||
+          row.contractCode === 'CON-EMP-001-2024';
+
+        const isViewerSystemAdmin =
+          currentUser?.role === 'Admin' ||
+          currentUser?.roleRaw === 'ADMIN';
+
+        // Security rule: Only the System Administrator can edit the System Administrator's contract
+        const canEditThisContract = !isEmployeeOnly && (!isSystemAdminContract || isViewerSystemAdmin);
+
+        return (
+          <div className="flex items-center justify-end gap-1.5">
             <button
               type="button"
               onClick={() => navigate(`/contracts/${row.id}`)}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 transition-colors"
-              title="Edit Contract"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition-colors"
+              title="View Details"
             >
-              <Edit2 className="w-3 h-3" /> Edit
+              <Eye className="w-3.5 h-3.5" />
+              <span>View</span>
             </button>
-          )}
-        </div>
-      )
+            {canEditThisContract && (
+              <button
+                type="button"
+                onClick={() => navigate(`/contracts/${row.id}`)}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 transition-colors"
+                title="Edit Contract"
+              >
+                <Edit2 className="w-3 h-3" /> Edit
+              </button>
+            )}
+          </div>
+        );
+      }
     }
   ];
 

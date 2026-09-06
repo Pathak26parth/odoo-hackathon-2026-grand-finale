@@ -120,6 +120,8 @@ export function normalizePayslip(ps) {
     paymentStatus: rawStatus,
     workedDays: parseFloat(ps.worked_days !== undefined ? ps.worked_days : 30),
     totalDaysInPeriod: ps.total_working_days || ps.total_days_in_period || 30,
+    emailSentAt: ps.email_sent_at || ps.emailSentAt || null,
+    emailStatus: (ps.email_sent_at || ps.emailSentAt) ? 'Sent' : (ps.emailStatus || 'Not Sent'),
     lines: ps.lines || []
   };
 }
