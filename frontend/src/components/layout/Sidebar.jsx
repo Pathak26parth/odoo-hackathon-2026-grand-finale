@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Sparkles,
   LayoutDashboard,
+  Sliders,
+  ShieldCheck,
   X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -34,6 +36,13 @@ export const Sidebar = ({ isOpen, onClose }) => {
     canRegisterFace,
     isHRManager
   } = useAuth();
+
+  const isPayrollAdmin =
+    role === 'HR Payroll Manager' ||
+    role === 'HR Payroll Admin' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
+  const isAdmin = role === 'Admin';
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -100,6 +109,10 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 <span className="inline-flex items-center gap-1 text-[9px] uppercase font-bold tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-0.5">
                   <Shield className="w-2.5 h-2.5 text-emerald-600" /> HR Operations Hub
                 </span>
+              ) : isPayrollAdmin ? (
+                <span className="inline-flex items-center gap-1 text-[9px] uppercase font-bold tracking-wider text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 mt-0.5">
+                  <ShieldCheck className="w-2.5 h-2.5 text-blue-600" /> Payroll Admin Hub
+                </span>
               ) : (
                 <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 block -mt-0.5">
                   HR &amp; Payroll
@@ -126,8 +139,17 @@ export const Sidebar = ({ isOpen, onClose }) => {
                   HR Panel
                 </span>
               )}
+              {isPayrollAdmin && (
+                <span className="text-[9px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100">
+                  Payroll Admin
+                </span>
+              )}
             </p>
             <nav className="space-y-0.5">
+              {/* Dedicated Payroll Admin Panel Link (Primary for Payroll Admin, also accessible to System Admin) */}
+              {(isPayrollAdmin || isAdmin) &&
+                renderSingleLink('Payroll Admin Panel', '/payroll/admin-panel', Sliders)}
+
               {/* Dashboard Link (HR Manager, HR Payroll Manager & Admin) */}
               {canAccessDashboard && renderSingleLink('Dashboard', '/dashboard', LayoutDashboard)}
 
@@ -352,6 +374,23 @@ export const Sidebar = ({ isOpen, onClose }) => {
 
                   {payrollExpanded && (
                     <div className="pl-9 pr-1 py-1 space-y-0.5 border-l border-slate-100 ml-5 my-0.5">
+                      {(isPayrollAdmin || isAdmin) && (
+                        <NavLink
+                          to="/payroll/admin-panel"
+                          onClick={onClose}
+                          className={({ isActive }) =>
+                            `flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                              isActive
+                                ? 'bg-blue-600 text-white font-semibold shadow-2xs'
+                                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                            }`
+                          }
+                        >
+                          <Sliders className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Admin Command Center</span>
+                        </NavLink>
+                      )}
+
                       <NavLink
                         to="/payroll/payruns"
                         onClick={onClose}

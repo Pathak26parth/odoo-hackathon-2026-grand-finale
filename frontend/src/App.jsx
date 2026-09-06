@@ -43,6 +43,7 @@ import { PayrunWizard } from './pages/payroll/PayrunWizard';
 import { PayrunDetail } from './pages/payroll/PayrunDetail';
 import { Payslips } from './pages/payroll/Payslips';
 import { PayslipDetail } from './pages/payroll/PayslipDetail';
+import { PayrollAdminPanel } from './pages/payroll/PayrollAdminPanel';
 
 // Dashboard & Reports
 import { Dashboard } from './pages/dashboard/Dashboard';
@@ -63,6 +64,14 @@ const AppLayout = () => {
     // Dashboard
     if (path === '/dashboard') {
       return [{ label: 'Dashboard' }];
+    }
+
+    // Payroll Admin Panel
+    if (path === '/payroll/admin-panel' || path === '/payroll-admin') {
+      return [
+        { label: 'Payroll', link: '/payroll/admin-panel' },
+        { label: 'Payroll Admin Command Center' }
+      ];
     }
 
     // Reports
@@ -343,11 +352,15 @@ const ProtectedRoute = ({ children }) => {
 
 // Default index redirection
 const IndexRedirect = () => {
-  const { isAuthenticated, canAccessDashboard, isEmployeeOnly, currentUser } = useAuth();
+  const { isAuthenticated, canAccessDashboard, isEmployeeOnly, currentUser, role } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (isEmployeeOnly) {
     const ownId = currentUser?.employeeId || currentUser?.internalEmployeeId || currentUser?.id || '1';
     return <Navigate to={`/employees/${ownId}`} replace />;
+  }
+  // Dedicated landing for Payroll Administrator
+  if (role === 'HR Payroll Manager' || role === 'HR Payroll Admin' || currentUser?.roleRaw === 'HR_PAYROLL_ADMIN') {
+    return <Navigate to="/payroll/admin-panel" replace />;
   }
   return <Navigate to={canAccessDashboard ? '/dashboard' : '/employees'} replace />;
 };
@@ -437,6 +450,10 @@ export default function App() {
             <Route path="/payroll/payruns" element={<Payruns />} />
             <Route path="/payroll/payruns/new" element={<PayrunWizard />} />
             <Route path="/payroll/payruns/:id" element={<PayrunDetail />} />
+
+            {/* DEDICATED PAYROLL ADMIN PANEL */}
+            <Route path="/payroll/admin-panel" element={<PayrollAdminPanel />} />
+            <Route path="/payroll-admin" element={<Navigate to="/payroll/admin-panel" replace />} />
 
             {/* MODULE 19 & 20 & 21: Payslips */}
             <Route path="/payroll/payslips" element={<Payslips />} />

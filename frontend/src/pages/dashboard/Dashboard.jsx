@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   DollarSign,
   FileCheck2,
@@ -8,8 +9,10 @@ import {
   Filter,
   CreditCard,
   Building2,
-  Users
+  Users,
+  Sliders
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { getEmployees, fetchEmployeesAsync } from '../../data/employees';
 import { getContracts, fetchContractsAsync } from '../../data/contracts';
 import { getAttendanceRecords, fetchAttendanceRecordsAsync } from '../../data/attendance';
@@ -29,6 +32,13 @@ import { PayrollAlerts } from '../../components/dashboard/PayrollAlerts';
 import { DepartmentBreakdown } from '../../components/dashboard/DepartmentBreakdown';
 
 export const Dashboard = () => {
+  const { role, currentUser } = useAuth();
+  const isPayrollAdminOrAdmin =
+    role === 'Admin' ||
+    role === 'HR Payroll Manager' ||
+    role === 'HR Payroll Admin' ||
+    currentUser?.roleRaw === 'HR_PAYROLL_ADMIN';
+
   // Filters
   const [periodFilter, setPeriodFilter] = useState('September 2026');
   const [departmentFilter, setDepartmentFilter] = useState('All');
@@ -203,8 +213,19 @@ export const Dashboard = () => {
           </p>
         </div>
 
-        {/* Dynamic Filters */}
-        <div className="flex flex-wrap items-center gap-2 text-xs bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+        {/* Dynamic Filters & Action Links */}
+        <div className="flex flex-wrap items-center gap-3">
+          {isPayrollAdminOrAdmin && (
+            <Link
+              to="/payroll/admin-panel"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-2xs transition-all transform hover:-translate-y-0.5"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Payroll Admin Panel</span>
+            </Link>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 text-xs bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center gap-1.5 px-1">
             <span className="text-slate-400 font-semibold text-[11px] uppercase">Period:</span>
             <select
@@ -251,6 +272,7 @@ export const Dashboard = () => {
           </div>
         </div>
       </div>
+    </div>
 
       {/* 5 KPI CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">

@@ -23,13 +23,28 @@ class AuthService {
       if (rows.length > 0) return rows[0].id;
     }
 
-    const cleanName = String(roleIdentifier).trim().toUpperCase().replace(/\s+/g, '_');
+    let cleanName = String(roleIdentifier).trim().toUpperCase().replace(/\s+/g, '_');
+    // Map common role aliases
+    if (cleanName === 'HR_PAYROLL_MANAGER' || cleanName === 'PAYROLL_ADMIN' || cleanName === 'HR_PAYROLL_ADMINISTRATOR') {
+      cleanName = 'HR_PAYROLL_ADMIN';
+    } else if (cleanName === 'SYSTEM_ADMIN' || cleanName === 'ADMINISTRATOR') {
+      cleanName = 'ADMIN';
+    } else if (cleanName === 'PAYROLL_USER') {
+      cleanName = 'HR_PAYROLL_USER';
+    }
+
     const rows = await query(
       'SELECT id FROM roles WHERE UPPER(name) = ? OR UPPER(display_name) = ?',
       [cleanName, String(roleIdentifier).trim().toUpperCase()]
     );
 
     if (rows.length > 0) return rows[0].id;
+
+    // Direct check for HR_PAYROLL_ADMIN if identifier contains both payroll and (admin or manager)
+    if (cleanName.includes('PAYROLL') && (cleanName.includes('ADMIN') || cleanName.includes('MANAGER'))) {
+      const payrollAdminRows = await query('SELECT id FROM roles WHERE name = "HR_PAYROLL_ADMIN"');
+      if (payrollAdminRows.length > 0) return payrollAdminRows[0].id;
+    }
 
     // Fallback default
     const empRows = await query('SELECT id FROM roles WHERE name = "EMPLOYEE"');
